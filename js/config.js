@@ -45,6 +45,11 @@ const BLOCKS = {
   21: { key: 'tallgrass', top: 36, bottom: 36, side: 36, solid: false, cross: true },
   22: { key: 'sapling',   top: 37, bottom: 37, side: 37, solid: false, cross: true },
   23: { key: 'bed',       top: 38, bottom: 8,  side: 39 },
+  // Muebles para la casa (se craftean con mesa cerca).
+  24: { key: 'diningtable', top: 49, bottom: 8,  side: 50 },
+  25: { key: 'chair',       top: 8,  bottom: 8,  side: 51 },
+  26: { key: 'bookshelf',   top: 8,  bottom: 8,  side: 52 },
+  27: { key: 'carpet',      top: 53, bottom: 53, side: 53 },
 };
 
 // Bloques disponibles en la barra rápida por defecto (teclas 1-7).

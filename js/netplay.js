@@ -58,6 +58,8 @@ class PuppetManager {
       }
       p.target.set(e.x, e.y, e.z);
       p.ry = e.ry;
+      // Perro adoptado en el anfitrión: el títere muestra el collar (y la cola).
+      if (e.tm && !p.creature.tamed && p.creature.setTamed) p.creature.setTamed(null);
     }
     for (const [k, p] of this.puppets) {
       if (!seen.has(k)) { p.creature.die(); this.puppets.delete(k); }
@@ -79,6 +81,10 @@ class PuppetManager {
       p.creature.group.position.lerp(p.target, Math.min(1, dt * 12));
       p.creature.pos.copy(p.creature.group.position);
       p.creature.group.rotation.y = p.ry;
+      if (p.creature.tail) { // cola del perro también en los títeres
+        p.creature.wagT += dt;
+        p.creature.tail.rotation.y = Math.sin(p.creature.wagT * (p.creature.tamed ? 9 : 3)) * 0.4;
+      }
     }
   }
 

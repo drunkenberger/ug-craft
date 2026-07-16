@@ -74,6 +74,7 @@ class Game {
     this.respawnPoint = (this.map.save && saved && saved.respawn) || null;
 
     this.chests = (this.map.save && saved && saved.chests) ? saved.chests : {};
+    this.savedPets = (this.map.save && saved && saved.pets) || [];
 
     // Multijugador: activo si el juego se sirve por http (server.js) y el mapa lo permite.
     this.net = NET.available && !!this.map.multiplayer;
@@ -124,10 +125,10 @@ class Game {
   combatTargets() {
     const list = [];
     if (!this.player.dead) {
-      list.push({ pos: this.player.pos, dead: false, damage: (n) => this.player.damage(n) });
+      list.push({ id: 'local', pos: this.player.pos, dead: false, damage: (n) => this.player.damage(n) });
     }
     for (const [id, av] of this.avatars) {
-      list.push({ pos: av.pos, dead: false, damage: (n) => NET.send({ t: 'dmg', to: id, n }) });
+      list.push({ id, pos: av.pos, dead: false, damage: (n) => NET.send({ t: 'dmg', to: id, n }) });
     }
     return list;
   }
@@ -152,7 +153,10 @@ class Game {
     }
     if (this.map.animals && !this.animals) {
       this.animals = new AnimalManager(this.scene, this.world, targetsFn,
-        (foodId, species, killer) => this.grantDrop(foodId, 1, killer));
+        (foodId, species, killer) => { if (foodId) this.grantDrop(foodId, 1, killer); });
+      // Perros adoptados de la partida guardada.
+      for (const [x, y, z] of this.savedPets || []) this.animals.spawnPet(x, y, z);
+      this.savedPets = null;
     }
   }
 
@@ -226,6 +230,10 @@ class Game {
       hit: (msg) => {
         const c = this.findCreature(msg.mob);
         if (c) c.hurt(msg.dmg, new THREE.Vector3(msg.kx, 0, msg.kz), msg.from);
+      },
+      tame: (msg) => { // un invitado adoptó un perro: el anfitrión lo hace suyo
+        const c = this.findCreature(msg.mob);
+        if (c && c.species === 'dog' && !c.tamed) c.setTamed(msg.from);
       },
       dmg: (msg) => this.player.damage(msg.n),
       drop: (msg) => {
@@ -312,7 +320,7 @@ class Game {
           list.push({ k: c.netId, ty: c.netType, x: c.pos.x, y: c.pos.y, z: c.pos.z, ry: c.group.rotation.y });
         }
         if (this.animals) for (const c of this.animals.animals) {
-          list.push({ k: c.netId, ty: c.netType, x: c.pos.x, y: c.pos.y, z: c.pos.z, ry: c.group.rotation.y });
+          list.push({ k: c.netId, ty: c.netType, x: c.pos.x, y: c.pos.y, z: c.pos.z, ry: c.group.rotation.y, tm: c.tamed ? 1 : 0 });
         }
         NET.send({ t: 'mobs', list });
       }
@@ -372,6 +380,17 @@ class Game {
     if (this.animals) list.push(...this.animals.animals);
     if (this.puppets) for (const p of this.puppets.puppets.values()) list.push(p.creature);
     return list;
+  }
+
+  // Adoptar un perro (directo si lo simulamos; por red si es un títere del anfitrión).
+  tameDog(creature) {
+    if (this.net && !NET.isHost) {
+      NET.send({ t: 'tame', mob: creature.netId });
+    } else {
+      creature.setTamed('local');
+    }
+    this.ui.toast(t('dogAdopted'), 4000);
+    this.milestone('primerPerro');
   }
 
   // Aplica daño a una criatura (directo si somos anfitrión, por red si no).
@@ -635,6 +654,17 @@ class Game {
       if (this.player.dead || this.state.won) return;
       if (this.map.onRightClick && this.map.onRightClick(this)) return;
 
+      // Perro salvaje en la mira: se adopta con un hueso.
+      const creature = this.targetCreature();
+      if (creature && creature.species === 'dog' && !creature.tamed) {
+        if (this.selectedId() === 118 && this.inventory.remove(118, 1)) {
+          this.tameDog(creature);
+        } else {
+          this.ui.toast(t('dogNeedBone'));
+        }
+        return;
+      }
+
       const target = this.targetBlock();
       // Clic derecho sobre mesa / horno / cofre / cama: usar el bloque.
       if (target) {
@@ -824,6 +854,12 @@ class Game {
       respawn: this.respawnPoint,
       inventory: this.inventory.serialize(),
       chests: this.chests,
+      // Perros adoptados por este jugador (si somos invitados, conservar los guardados).
+      pets: this.animals
+        ? this.animals.animals
+            .filter((a) => a.tamed && a.owner === 'local' && !a.dead)
+            .map((a) => [a.pos.x, a.pos.y, a.pos.z])
+        : this.savedPets || [],
       updated: Date.now(),
     });
     this.world.dirty = false;

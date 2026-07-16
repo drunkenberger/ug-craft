@@ -151,6 +151,7 @@ function handleMessage(sock, state, msg) {
       break;
     }
     case 'hit':    // golpe a un mob: solo lo procesa el anfitrión
+    case 'tame':   // adopción de un perro: la aplica el anfitrión
     case 'kick':   // patada al balón (fútbol)
     case 'slide': { // barrida (fútbol)
       msg.from = state.id;

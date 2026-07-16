@@ -50,6 +50,11 @@ const RECIPES = [
   { out: { id: 114, n: 1 }, cost: [[3, 3], [103, 2]],   table: true },  // pico de piedra
   { out: { id: 115, n: 1 }, cost: [[112, 3], [103, 2]], table: true },  // pico de hierro
   { out: { id: 116, n: 1 }, cost: [[112, 2], [103, 1]], table: true },  // espada de hierro
+  // Muebles para la casa.
+  { out: { id: 24, n: 1 }, cost: [[7, 4], [103, 2]],  table: true },  // mesa de comedor
+  { out: { id: 25, n: 2 }, cost: [[7, 2], [103, 2]],  table: true },  // sillas
+  { out: { id: 26, n: 1 }, cost: [[7, 6]],            table: true },  // estantería
+  { out: { id: 27, n: 3 }, cost: [[20, 2]],           table: false }, // alfombras (flores tejidas)
 ];
 
 // Recetas del horno (clic derecho sobre un horno): carne cruda + leña.

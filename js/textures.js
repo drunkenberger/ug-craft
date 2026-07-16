@@ -209,6 +209,58 @@ const TILE_PAINTERS = {
     ctx.fillStyle = 'rgb(240,240,245)';
     ctx.fillRect(x0, y0, 4, 5);
   },
+  49: (ctx, x0, y0, rng) => { // mesa de comedor: tapa con mantel
+    TILE_PAINTERS[8](ctx, x0, y0, rng);
+    ctx.fillStyle = 'rgb(235,235,240)';
+    ctx.fillRect(x0 + 3, y0 + 3, 10, 10);
+    ctx.fillStyle = 'rgb(200,60,60)';
+    ctx.fillRect(x0 + 3, y0 + 3, 10, 1); ctx.fillRect(x0 + 3, y0 + 12, 10, 1);
+    ctx.fillRect(x0 + 3, y0 + 3, 1, 10); ctx.fillRect(x0 + 12, y0 + 3, 1, 10);
+  },
+  50: (ctx, x0, y0, rng) => { // mesa de comedor: lado (tapa + patas)
+    paintNoise(ctx, x0, y0, rng, [120, 92, 58], 12); // sombra bajo la mesa
+    for (let y = 0; y < 4; y++) {
+      for (let x = 0; x < ATLAS.TILE; x++) {
+        ctx.fillStyle = shade([168, 136, 82], (rng() - 0.5) * 16);
+        ctx.fillRect(x0 + x, y0 + y, 1, 1);
+      }
+    }
+    ctx.fillStyle = 'rgb(90,66,40)';
+    ctx.fillRect(x0 + 1, y0 + 4, 3, 12);
+    ctx.fillRect(x0 + 12, y0 + 4, 3, 12);
+  },
+  51: (ctx, x0, y0, rng) => { // silla: respaldo con barrotes y patas
+    paintNoise(ctx, x0, y0, rng, [140, 108, 66], 12);
+    ctx.fillStyle = 'rgb(90,66,40)';
+    ctx.fillRect(x0, y0, 16, 2); // borde superior del respaldo
+    for (const bx of [2, 7, 12]) ctx.fillRect(x0 + bx, y0 + 2, 2, 6);
+    ctx.fillRect(x0, y0 + 8, 16, 2); // asiento
+    ctx.fillRect(x0 + 1, y0 + 10, 3, 6);
+    ctx.fillRect(x0 + 12, y0 + 10, 3, 6);
+  },
+  52: (ctx, x0, y0, rng) => { // estantería: filas de libros de colores
+    TILE_PAINTERS[8](ctx, x0, y0, rng);
+    const colors = [[200, 60, 60], [60, 120, 200], [70, 160, 70], [220, 180, 60], [150, 80, 180]];
+    for (const ry of [2, 9]) {
+      ctx.fillStyle = 'rgb(60,44,26)';
+      ctx.fillRect(x0 + 1, y0 + ry - 1, 14, 7);
+      let bx = 2;
+      while (bx < 14) {
+        const w = 2 + Math.floor(rng() * 2);
+        ctx.fillStyle = shade(colors[Math.floor(rng() * colors.length)], (rng() - 0.5) * 30);
+        ctx.fillRect(x0 + bx, y0 + ry, Math.min(w, 14 - bx), 5);
+        bx += w + (rng() < 0.3 ? 1 : 0);
+      }
+    }
+  },
+  53: (ctx, x0, y0, rng) => { // alfombra: roja con cenefa dorada
+    paintNoise(ctx, x0, y0, rng, [172, 48, 52], 20);
+    ctx.fillStyle = 'rgb(220,180,80)';
+    ctx.fillRect(x0 + 1, y0 + 1, 14, 1); ctx.fillRect(x0 + 1, y0 + 14, 14, 1);
+    ctx.fillRect(x0 + 1, y0 + 1, 1, 14); ctx.fillRect(x0 + 14, y0 + 1, 1, 14);
+    ctx.fillRect(x0 + 7, y0 + 7, 2, 2); // rombo central
+    ctx.fillRect(x0 + 6, y0 + 8, 4, 1); ctx.fillRect(x0 + 8, y0 + 6, 1, 4);
+  },
   27: (ctx, x0, y0, rng) => { // bloque corazón (easter egg)
     paintNoise(ctx, x0, y0, rng, [225, 130, 160], 20);
     // corazón blanco pixelado al centro
