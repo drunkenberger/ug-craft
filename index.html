@@ -1,0 +1,183 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>EugeCraft</title>
+<link rel="stylesheet" href="css/style.css">
+</head>
+<body>
+
+<div id="hud" class="hidden">
+  <div id="crosshair">+</div>
+  <div id="info"></div>
+  <div id="netstatus"></div>
+  <div id="hint"></div>
+  <div id="toast"></div>
+  <div id="hearts"></div>
+  <div id="hunger"></div>
+  <div id="hotbar"></div>
+  <div id="damage-flash"></div>
+</div>
+
+<div id="craft" class="hidden">
+  <div class="panel craft-panel">
+    <h1 data-i18n="craftTitle"></h1>
+    <p id="craft-hint"></p>
+    <div id="craft-list"></div>
+    <button id="craftCloseBtn" class="btn secondary" data-i18n="close"></button>
+  </div>
+</div>
+
+<div id="chest" class="hidden">
+  <div class="panel craft-panel">
+    <h1 data-i18n="chestTitle"></h1>
+    <p id="chest-hint" data-i18n="chestHint"></p>
+    <div class="chest-cols">
+      <div class="chest-col">
+        <h3 data-i18n="chestContents"></h3>
+        <div id="chest-left"></div>
+      </div>
+      <div class="chest-col">
+        <h3 data-i18n="chestYours"></h3>
+        <div id="chest-right"></div>
+      </div>
+    </div>
+    <button id="chestCloseBtn" class="btn secondary" data-i18n="close"></button>
+  </div>
+</div>
+
+<div id="menu">
+  <div id="menu-floaters" aria-hidden="true">
+    <span>⛏️</span><span>🧟</span><span>🐷</span><span>⚽</span>
+    <span>💎</span><span>🌳</span><span>🐔</span><span>💗</span>
+  </div>
+  <div id="title-wrap">
+    <h1 id="game-title">EugeCraft&nbsp;⛏️</h1>
+    <p id="splash"></p>
+  </div>
+  <p class="big" data-i18n="menuTitle"></p>
+  <div id="map-grid"></div>
+  <button id="charBtn" class="btn secondary" data-i18n="charBtn"></button>
+  <p id="menu-net"></p>
+</div>
+
+<div id="chardiv" class="hidden">
+  <div class="panel craft-panel">
+    <h1 data-i18n="charTitle"></h1>
+    <div class="char-cols">
+      <canvas id="char-preview" width="240" height="300"></canvas>
+      <div id="char-options"></div>
+    </div>
+    <button id="charCloseBtn" class="btn" data-i18n="charDone"></button>
+  </div>
+</div>
+
+<div id="slots" class="hidden">
+  <div class="panel craft-panel">
+    <h1 id="slots-title"></h1>
+    <div id="slots-list"></div>
+    <button id="slotsBackBtn" class="btn secondary" data-i18n="backToMenu"></button>
+  </div>
+</div>
+
+<div id="overlay" class="hidden">
+  <div class="panel">
+    <h1>EugeCraft ⛏️</h1>
+    <p class="big" data-i18n="clickToPlay"></p>
+    <ul id="help">
+      <li data-i18n="helpMove"></li>
+      <li data-i18n="helpJump"></li>
+      <li data-i18n="helpBreak"></li>
+      <li data-i18n="helpPlace"></li>
+      <li data-i18n="helpHotbar"></li>
+      <li data-i18n="helpCraft"></li>
+      <li data-i18n="helpEat"></li>
+      <li data-i18n="helpNight"></li>
+      <li data-i18n="helpEsc"></li>
+    </ul>
+    <button id="menuBtn" class="btn secondary" data-i18n="backToMenu"></button>
+  </div>
+</div>
+
+<div id="egg" class="hidden">
+  <div class="panel egg-panel">
+    <h1 id="egg-title"></h1>
+    <div id="egg-quiz" class="hidden">
+      <p id="egg-question"></p>
+      <div id="egg-options"></div>
+      <p id="egg-feedback"></p>
+    </div>
+    <div id="egg-message" class="hidden">
+      <p id="egg-text"></p>
+      <p id="egg-from"></p>
+      <p id="egg-prize"></p>
+      <button id="eggCloseBtn" class="btn" data-i18n="eggBtn"></button>
+    </div>
+  </div>
+</div>
+
+<div id="picker" class="hidden">
+  <div class="panel craft-panel">
+    <h1 data-i18n="pickerTitle"></h1>
+    <p class="picker-hint" data-i18n="pickerHint"></p>
+    <div id="picker-grid"></div>
+    <button id="pickerCloseBtn" class="btn secondary" data-i18n="close"></button>
+  </div>
+</div>
+
+<div id="death" class="hidden">
+  <div class="panel">
+    <h1 data-i18n="dead"></h1>
+    <button id="respawnBtn" class="btn" data-i18n="respawn"></button>
+  </div>
+</div>
+
+<div id="win" class="hidden">
+  <div class="panel">
+    <h1 data-i18n="win"></h1>
+    <p id="win-time" class="big"></p>
+    <button id="winAgainBtn" class="btn" data-i18n="playAgain"></button>
+    <button id="winMenuBtn" class="btn secondary" data-i18n="backToMenu"></button>
+  </div>
+</div>
+
+<script src="lib/three.min.js"></script>
+<script src="js/i18n.js"></script>
+<script src="js/config.js"></script>
+<script src="js/noise.js"></script>
+<script src="js/textures.js"></script>
+<script src="js/storage.js"></script>
+<script src="js/items.js"></script>
+<script src="js/inventory.js"></script>
+<script src="js/physics.js"></script>
+<script src="js/world.js"></script>
+<script src="js/maps.js"></script>
+<script src="js/survival.js"></script>
+<script src="js/player.js"></script>
+<script src="js/controls.js"></script>
+<script src="js/sky.js"></script>
+<script src="js/daynight.js"></script>
+<script src="js/creature.js"></script>
+<script src="js/character.js"></script>
+<script src="js/charcreator.js"></script>
+<script src="js/mobs.js"></script>
+<script src="js/animals.js"></script>
+<script src="js/crafting.js"></script>
+<script src="js/chest.js"></script>
+<script src="js/eggs.js"></script>
+<script src="js/picker.js"></script>
+<script src="js/soccer.js"></script>
+<script src="js/treasure.js"></script>
+<script src="js/race.js"></script>
+<script src="js/parkour.js"></script>
+<script src="js/maze.js"></script>
+<script src="js/net.js"></script>
+<script src="js/minimap.js"></script>
+<script src="js/netplay.js"></script>
+<script src="js/menubg.js"></script>
+<script src="js/ui.js"></script>
+<script src="js/game.js"></script>
+<script src="js/main.js"></script>
+</body>
+</html>
