@@ -105,10 +105,21 @@ class Humanoid extends Creature {
 
   // Caminar: piernas y brazos se balancean en oposición.
   swingLegs(phase) {
+    if (this.sitting) return; // sentado: la pose la fija setSitting
     const swing = Math.sin(phase) * 0.6;
     this.legL.rotation.x = swing;
     this.legR.rotation.x = -swing;
     this.armL.rotation.x = -swing * 0.8;
     this.armR.rotation.x = swing * 0.8;
+  }
+
+  // Pose sentado: muslos hacia adelante (rodilla en escuadra) y brazos en reposo.
+  setSitting(on) {
+    this.sitting = on;
+    const thigh = on ? -1.5 : 0;
+    this.legL.rotation.x = thigh;
+    this.legR.rotation.x = thigh;
+    this.armL.rotation.x = on ? -0.2 : 0;
+    this.armR.rotation.x = on ? -0.2 : 0;
   }
 }

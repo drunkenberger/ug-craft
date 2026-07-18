@@ -215,7 +215,7 @@ class Game {
       },
       pos: (msg) => {
         const av = this.avatars.get(msg.from);
-        if (av) av.setTarget(msg.x, msg.y, msg.z, msg.yaw);
+        if (av) av.setTarget(msg.x, msg.y, msg.z, msg.yaw, msg.sit);
       },
       skin: (msg) => {
         const av = this.avatars.get(msg.from);
@@ -309,7 +309,7 @@ class Game {
     if (this.netTimers.pos > 0.12) {
       this.netTimers.pos = 0;
       const p = this.player.pos;
-      NET.send({ t: 'pos', x: p.x, y: p.y, z: p.z, yaw: this.controls.yaw });
+      NET.send({ t: 'pos', x: p.x, y: p.y, z: p.z, yaw: this.controls.yaw, sit: this.player.sitting ? 1 : 0 });
     }
     if (NET.isHost) {
       this.netTimers.mobs += dt;
@@ -507,6 +507,30 @@ class Game {
     }
   }
 
+  // Sentarse en una silla (clic derecho): fija al jugador sobre el asiento,
+  // congela el movimiento y muestra la pose sentada en vista FIFA.
+  sit(pos) {
+    // El asiento (rodilla) queda a ras de la cara superior del bloque silla.
+    this.player.pos.set(pos.x + 0.5, pos.y + 1 - 0.78, pos.z + 0.5);
+    this.player.vel.set(0, 0, 0);
+    this.player.sitting = true;
+    // En mapas con vista FIFA, cambiar a tercera persona para verse sentado.
+    if (this.map.thirdPerson && this.cameraMode !== 'third') {
+      this.sitPrevView = 'pov';
+      this.cameraMode = 'third';
+    }
+    this.ui.toast(t('sitDown'));
+  }
+
+  standUp() {
+    if (!this.player.sitting) return;
+    this.player.sitting = false;
+    if (this.ownAvatar) this.ownAvatar.setSitting(false);
+    if (this.sitPrevView === 'pov') this.cameraMode = 'pov';
+    this.sitPrevView = null;
+    this.ui.toast(t('standUp'));
+  }
+
   nearTable() {
     const p = this.player.pos;
     const px = Math.floor(p.x), py = Math.floor(p.y), pz = Math.floor(p.z);
@@ -652,6 +676,7 @@ class Game {
 
     this.controls.onRightClick = () => {
       if (this.player.dead || this.state.won) return;
+      if (this.player.sitting) { this.standUp(); return; }
       if (this.map.onRightClick && this.map.onRightClick(this)) return;
 
       // Perro salvaje en la mira: se adopta con un hueso.
@@ -673,6 +698,10 @@ class Game {
         if (this.map.crafting && targetId === 10) { this.openFurnace(); return; }
         if (targetId === 13 && this.map.onSign) { this.map.onSign(this, target.inside); return; }
         if (targetId === 23) { this.sleep(target.inside); return; }
+        if (targetId === 25) {
+          if (this.player.sitting) this.standUp(); else this.sit(target.inside);
+          return;
+        }
         if (!this.inventory.isFree() && targetId === 11) {
           this.openChest(target.inside.x, target.inside.y, target.inside.z);
           return;
@@ -730,6 +759,10 @@ class Game {
     g.visible = true;
     g.position.copy(this.player.pos);
     g.rotation.y = this.controls.yaw + Math.PI;
+    if (this.player.sitting !== this.ownAvatar.sitting) {
+      this.ownAvatar.setSitting(this.player.sitting);
+    }
+    if (this.player.sitting) { this.lastOwnPos.copy(this.player.pos); return; }
     const speed = this.player.pos.distanceTo(this.lastOwnPos) / Math.max(dt, 0.001);
     this.lastOwnPos.copy(this.player.pos);
     if (speed > 0.8) {
@@ -741,6 +774,9 @@ class Game {
   }
 
   respawnPlayer() {
+    if (this.sitPrevView === 'pov') this.cameraMode = 'pov';
+    this.sitPrevView = null;
+    if (this.ownAvatar) this.ownAvatar.setSitting(false);
     if (this.mobs) this.mobs.clear();
     this.player.respawn(this.respawnPoint || this.spawn);
     this.renderHearts();
@@ -750,6 +786,15 @@ class Game {
   update(dt) {
     this.world.update(this.player.pos.x, this.player.pos.z);
     const active = this.controls.locked && !this.player.dead && !this.state.won;
+
+    // Sentado: cualquier tecla de movimiento levanta al jugador.
+    if (this.player.sitting && active) {
+      const k = this.controls.keys;
+      if (['KeyW', 'KeyA', 'KeyS', 'KeyD', 'Space',
+           'ArrowUp', 'ArrowDown', 'ArrowLeft', 'ArrowRight'].some((c) => k.has(c))) {
+        this.standUp();
+      }
+    }
 
     if (active) {
       this.player.update(dt, this.controls);

@@ -33,6 +33,7 @@ class Player {
     this.hungerTimer = 0;
     this.starveTimer = 0;
     this.dead = false;
+    this.sitting = false;
   }
 
   eyePosition() {
@@ -41,6 +42,13 @@ class Player {
 
   update(dt, controls) {
     if (this.dead) return;
+
+    // Sentado en una silla: sin movimiento ni física, pero el hambre sigue.
+    if (this.sitting) {
+      this.vel.set(0, 0, 0);
+      this.updateVitals(dt);
+      return;
+    }
 
     // ¿Está nadando? (agua a la altura de los pies o del pecho)
     const bx = Math.floor(this.pos.x), bz = Math.floor(this.pos.z);
@@ -84,6 +92,11 @@ class Player {
       else this.damage(100, true);
     }
 
+    this.updateVitals(dt);
+  }
+
+  // Temporizadores de invulnerabilidad, hambre y regeneración (siguen sentado).
+  updateVitals(dt) {
     this.invulnTimer = Math.max(0, this.invulnTimer - dt);
 
     // Hambre (solo supervivencia): baja despacio; sin comida no hay regeneración

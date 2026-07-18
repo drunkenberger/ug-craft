@@ -19,15 +19,18 @@ class RemoteAvatar {
     if (app) this.model.build({ ...Character.DEFAULT, ...app });
   }
 
-  setTarget(x, y, z, yaw) {
+  setTarget(x, y, z, yaw, sit) {
     this.pos.set(x, y, z);
     this.yaw = yaw;
+    const sitting = !!sit;
+    if (sitting !== this.model.sitting) this.model.setSitting(sitting);
   }
 
   update(dt) {
     const g = this.model.group;
     g.position.lerp(this.pos, Math.min(1, dt * 12));
     g.rotation.y = this.yaw + Math.PI;
+    if (this.model.sitting) { this.lastPos.copy(g.position); return; }
     const speed = g.position.distanceTo(this.lastPos) / Math.max(dt, 0.001);
     this.lastPos.copy(g.position);
     if (speed > 0.8) {
