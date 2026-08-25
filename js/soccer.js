@@ -107,6 +107,7 @@ class SoccerState {
     this.avatarPhase = 0;
     this.slideCd = 0;
     this.slideTimer = 0;
+    this.slides = [];      // barridas activas que el anfitrión evalúa para derribar jugadores
     this.netBall = null;   // posición sincronizada del balón (invitado)
     this.syncTimer = 0;
     this.teamsSet = false;
@@ -146,13 +147,33 @@ class SoccerState {
     b.vel.set(msg.dx * 13, Math.max(3, msg.dy * 12 + 4), msg.dz * 13);
   }
 
-  onNetSlide(msg) { // barrida del invitado: disparo raso
+  onNetSlide(msg) { // barrida del invitado: disparo raso + posible derribo
     if (!this.isAuthority()) return;
     const av = this.game.avatars.get(msg.from);
     if (!av) return;
     const b = this.ball;
-    if (Math.hypot(b.pos.x - av.pos.x, b.pos.z - av.pos.z) > 2.2) return;
-    b.vel.set(msg.dx * 15, 1.5, msg.dz * 15);
+    if (Math.hypot(b.pos.x - av.pos.x, b.pos.z - av.pos.z) <= 2.2) {
+      b.vel.set(msg.dx * 15, 1.5, msg.dz * 15);
+    }
+    this.slides.push({ id: msg.from, dx: msg.dx, dz: msg.dz, t: 0.5, hit: new Set() });
+  }
+
+  // Derriba a un jugador: local (anfitrión) o remoto (se le avisa por red).
+  tackle(id, dx, dz) {
+    if (id === 'local') this.stunLocal(dx, dz);
+    else NET.send({ t: 'tackled', who: id, dx, dz });
+  }
+
+  stunLocal(dx, dz) {
+    const p = this.game.player;
+    p.stunTimer = 1.2;
+    p.vel.set(dx * 5, 3, dz * 5);
+    this.game.ui.toast('💥 ¡Te barrieron!');
+  }
+
+  onTackled(msg) { // me derribó una barrida ajena
+    if (msg.who !== NET.id) return;
+    this.stunLocal(msg.dx || 0, msg.dz || 0);
   }
 
   onNetScore(msg) { // el invitado recibe el marcador (mapeado a su equipo)
@@ -176,13 +197,16 @@ class SoccerState {
   // Barrida (clic derecho): embiste, dispara el balón raso y derriba al rival.
   slide() {
     const g = this.game;
-    if (this.slideCd > 0) return true;
+    if (this.slideCd > 0 || g.player.stunTimer > 0) return true;
     this.slideCd = 2;
     this.slideTimer = 0.45;
     const yaw = g.controls.yaw;
     this.slideDir = new THREE.Vector3(-Math.sin(yaw), 0, -Math.cos(yaw));
     g.player.boost = { x: this.slideDir.x * 7, z: this.slideDir.z * 7, t: 0.45 };
-    if (!this.isAuthority()) {
+    if (this.isAuthority()) {
+      // El anfitrión evalúa a quién derriba mientras dura la barrida.
+      this.slides.push({ id: 'local', dx: this.slideDir.x, dz: this.slideDir.z, t: 0.5, hit: new Set() });
+    } else {
       NET.send({ t: 'slide', dx: this.slideDir.x, dz: this.slideDir.z });
     }
     return true;
@@ -198,7 +222,7 @@ class SoccerState {
   // Patada del jugador (clic izquierdo cerca del balón).
   kick() {
     const g = this.game, b = this.ball;
-    if (this.kickCd > 0) return true;
+    if (this.kickCd > 0 || g.player.stunTimer > 0) return true;
     const dist = Math.hypot(b.pos.x - g.player.pos.x, b.pos.z - g.player.pos.z);
     if (dist > 2.4) return true;
     this.kickCd = 0.35;
@@ -240,6 +264,28 @@ class SoccerState {
           g.ui.toast('💥 ¡Barrida!');
         }
       }
+    }
+
+    // El anfitrión arbitra los tackles entre jugadores humanos.
+    if (authority && this.slides.length) {
+      const players = [{ id: 'local', pos: g.player.pos }];
+      for (const [id, av] of g.avatars) players.push({ id, pos: av.pos });
+      for (const sl of this.slides) {
+        sl.t -= dt;
+        const src = sl.id === 'local' ? g.player.pos : (g.avatars.get(sl.id) || {}).pos;
+        if (!src) continue;
+        for (const tgt of players) {
+          if (tgt.id === sl.id || sl.hit.has(tgt.id)) continue;
+          const dx = tgt.pos.x - src.x, dz = tgt.pos.z - src.z;
+          const dist = Math.hypot(dx, dz);
+          if (dist < 1.6 && (dx * sl.dx + dz * sl.dz) > 0) {
+            sl.hit.add(tgt.id);
+            this.tackle(tgt.id, sl.dx, sl.dz);
+            g.ui.toast('💥 ¡Barrida!');
+          }
+        }
+      }
+      this.slides = this.slides.filter((s) => s.t > 0);
     }
 
     if (authority) {
@@ -307,8 +353,9 @@ class SoccerState {
     if (third) {
       this.avatar.group.position.copy(pl.pos);
       this.avatar.group.rotation.y = g.controls.yaw + Math.PI;
-      // Barrida: se inclina hacia atrás; si no, camina.
-      this.avatar.group.rotation.x = this.slideTimer > 0 ? -0.9 : 0;
+      // Derribado: tumbado en el suelo; en barrida se inclina; si no, camina.
+      this.avatar.group.rotation.x =
+        pl.stunTimer > 0 ? -Math.PI / 2.3 : (this.slideTimer > 0 ? -0.9 : 0);
       const speed = Math.hypot(pl.vel.x, pl.vel.z);
       this.avatarPhase += dt * speed * 2.2;
       this.avatar.swingLegs(speed > 0.5 ? this.avatarPhase : 0);

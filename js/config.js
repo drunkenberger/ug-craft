@@ -50,6 +50,11 @@ const BLOCKS = {
   25: { key: 'chair',       top: 8,  bottom: 8,  side: 51 },
   26: { key: 'bookshelf',   top: 8,  bottom: 8,  side: 52 },
   27: { key: 'carpet',      top: 53, bottom: 53, side: 53 },
+  28: { key: 'painting',    top: 8,  bottom: 8,  side: 54, solid: false },
+  29: { key: 'lantern',     top: 55, bottom: 55, side: 55, light: true },
+  30: { key: 'vase',        top: 56, bottom: 56, side: 57, solid: false },
+  31: { key: 'glass',       top: 58, bottom: 58, side: 58, solid: false },
+  32: { key: 'brick',       top: 59, bottom: 59, side: 59 },
 };
 
 // Bloques disponibles en la barra rápida por defecto (teclas 1-7).

@@ -1,9 +1,10 @@
 // Una partida en un mapa concreto: escena, mundo, jugador, inventario y reglas.
 class Game {
-  constructor(mapKey, ctx, slot = 1) {
+  constructor(mapKey, ctx, slot = 1, gameId = null) {
     this.mapKey = mapKey;
     this.map = MAPS[mapKey];
     this.slot = slot;
+    this.gameId = gameId; // partida compartida del servidor (mundo y estado por jugador)
     this.ui = ctx.ui;
     this.controls = ctx.controls;
     this.renderer = ctx.renderer;
@@ -28,7 +29,10 @@ class Game {
     // Mapas con mundo guardable usan slots; los demás solo guardan récords
     // (por circuito/variante cuando el mapa define `variants`).
     this.scoreKey = this.map.variants ? `${mapKey}#v${slot}` : mapKey;
-    const saved = this.map.save ? Storage.loadSlot(mapKey, slot) : Storage.load(this.scoreKey);
+    // En partida compartida no cargamos nada local: el mundo y el estado los manda el servidor.
+    const saved = this.map.save
+      ? (gameId ? null : Storage.loadSlot(mapKey, slot))
+      : Storage.load(this.scoreKey);
     this.savedMeta = saved || {};
 
     this.inventory = new Inventory(this.map.inventory, this.map.hotbar || HOTBAR);
@@ -77,7 +81,9 @@ class Game {
     this.savedPets = (this.map.save && saved && saved.pets) || [];
 
     // Multijugador: activo si el juego se sirve por http (server.js) y el mapa lo permite.
-    this.net = NET.available && !!this.map.multiplayer;
+    // Los mapas con guardado solo van a red como partida compartida (gameId);
+    // sus partidas locales quedan privadas de la máquina. Minijuegos: red directa.
+    this.net = NET.available && !!this.map.multiplayer && (!this.map.save || !!this.gameId);
     this.avatars = new Map(); // peerId → RemoteAvatar
     this.puppets = null;      // mobs dibujados (cuando no somos anfitrión)
     this.netTimers = { pos: 0, mobs: 0, time: 0 };
@@ -149,7 +155,11 @@ class Game {
       this.mobs = new MobManager(this.scene, this.world, targetsFn, (from, dir) => {
         this.spawnBolt(from, dir, true);
         if (this.net) NET.send({ t: 'bolt', x: from.x, y: from.y, z: from.z, dx: dir.x, dy: dir.y, dz: dir.z, hostile: true });
-      }, (itemId, n, killer) => this.grantDrop(itemId, n, killer));
+      }, (itemId, n, killer) => this.grantDrop(itemId, n, killer),
+      (x, y, z, id) => {
+        if (this.net) NET.send({ t: 'block', x, y, z, id });
+        trackBlockChange(this, x, y, z, id);
+      });
     }
     if (this.map.animals && !this.animals) {
       this.animals = new AnimalManager(this.scene, this.world, targetsFn,
@@ -161,18 +171,25 @@ class Game {
   }
 
   setupNet() {
-    NET.join(this.mapKey, {
+    const room = this.gameId ? `${this.mapKey}#${this.gameId}` : this.mapKey;
+    NET.join(room, {
       welcome: (msg) => {
         if (msg.time !== null && msg.time !== undefined && this.map.dayNight) {
           this.daynight.time = msg.time;
         }
-        this.applyNetEdits(msg.edits || {});
+        // En partidas compartidas el servidor es la fuente de verdad del mundo.
+        const serverHasWorld = msg.edits && Object.keys(msg.edits).length > 0;
+        if (this.gameId && serverHasWorld) this.adoptServerWorld(msg.edits);
+        else this.applyNetEdits(msg.edits || {});
+        // Estado personal guardado (posición, inventario, vida, hambre) de esta partida.
+        if (this.gameId && msg.pstate) this.restorePlayerState(msg.pstate);
         for (const id of msg.peers) this.addAvatar(id);
         NET.send({ t: 'skin', app: Character.appearance() });
         if (NET.isHost) {
           if (!this.mobs) this.createManagers(); // (puede ser una reconexión)
           if (this.puppets) { this.puppets.clear(); this.puppets = null; }
-          if (Object.keys(this.world.edits).length) {
+          // Solo sembramos nuestro mundo si el servidor aún no tiene uno.
+          if (!serverHasWorld && Object.keys(this.world.edits).length) {
             NET.send({ t: 'edits', edits: this.world.edits });
           }
         } else if (!this.puppets) {
@@ -215,7 +232,7 @@ class Game {
       },
       pos: (msg) => {
         const av = this.avatars.get(msg.from);
-        if (av) av.setTarget(msg.x, msg.y, msg.z, msg.yaw, msg.sit);
+        if (av) av.setTarget(msg.x, msg.y, msg.z, msg.yaw, msg.sit, msg.down);
       },
       skin: (msg) => {
         const av = this.avatars.get(msg.from);
@@ -250,6 +267,7 @@ class Game {
       score: (msg) => { if (this.state.soccer) this.state.soccer.onNetScore(msg); },
       kick: (msg) => { if (this.state.soccer) this.state.soccer.onNetKick(msg); },
       slide: (msg) => { if (this.state.soccer) this.state.soccer.onNetSlide(msg); },
+      tackled: (msg) => { if (this.state.soccer) this.state.soccer.onTackled(msg); },
       // Carreras en red: arranque sincronizado, ganador y posiciones.
       racestart: () => {
         if (this.state.race) this.state.race.onRaceStart();
@@ -263,7 +281,7 @@ class Game {
         this.ui.toast(t('netLost'), 10000);
         this.ui.setNetStatus(null);
       },
-    });
+    }, this.gameId ? Storage.playerName() : null);
   }
 
   addAvatar(id) {
@@ -281,6 +299,44 @@ class Game {
       if (a) return a;
     }
     return null;
+  }
+
+  // Restaura el estado personal guardado en el servidor (partida compartida).
+  restorePlayerState(s) {
+    if (s.pos && s.pos.x !== undefined) this.player.respawn(s.pos);
+    if (s.health !== undefined) this.player.health = s.health;
+    if (s.hunger !== undefined) this.player.hunger = s.hunger;
+    if (s.day) this.state.day = s.day;
+    if (s.inventory) { this.inventory.restore(s.inventory); this.refreshHotbar(); }
+    this.renderHearts();
+    if (this.map.hunger) this.ui.setInfo(`☀️ ${t('dayLabel')} ${this.state.day}`);
+  }
+
+  // Envía el estado personal al servidor (se guarda por nombre de jugador).
+  savePlayerState() {
+    if (!this.net || !NET.active()) return;
+    NET.send({ t: 'pstate', state: {
+      pos: { x: this.player.pos.x, y: this.player.pos.y, z: this.player.pos.z },
+      health: this.player.health,
+      hunger: this.player.hunger,
+      day: this.state.day,
+      inventory: this.inventory.serialize(),
+    } });
+  }
+
+  // Reemplaza el mundo local por el compartido del servidor y lo reconstruye.
+  adoptServerWorld(edits) {
+    for (const map of [this.world.meshes, this.world.crossMeshes, this.world.waterMeshes]) {
+      for (const mesh of map.values()) { this.scene.remove(mesh); mesh.geometry.dispose(); }
+      map.clear();
+    }
+    this.world.chunks.clear();
+    this.world.buildQueue.length = 0;
+    this.world.edits = { ...edits };
+    const p = this.player.pos;
+    this.world.update(p.x, p.z);
+    scanWorldExtras(this);
+    if (this.map.canBuild) initTorchLights(this);
   }
 
   // Aplica muchas ediciones de golpe reconstruyendo cada chunk una sola vez.
@@ -309,7 +365,7 @@ class Game {
     if (this.netTimers.pos > 0.12) {
       this.netTimers.pos = 0;
       const p = this.player.pos;
-      NET.send({ t: 'pos', x: p.x, y: p.y, z: p.z, yaw: this.controls.yaw, sit: this.player.sitting ? 1 : 0 });
+      NET.send({ t: 'pos', x: p.x, y: p.y, z: p.z, yaw: this.controls.yaw, sit: this.player.sitting ? 1 : 0, down: this.player.stunTimer > 0 ? 1 : 0 });
     }
     if (NET.isHost) {
       this.netTimers.mobs += dt;
@@ -346,627 +402,81 @@ class Game {
   }
 
   // ---- Rayos y objetivos ----
-  centerRay() {
-    this.raycaster.setFromCamera({ x: 0, y: 0 }, this.camera);
-    return this.raycaster;
-  }
 
-  targetBlock() {
-    const hits = this.centerRay().intersectObjects(this.world.raycastTargets());
-    if (!hits.length) return null;
-    const n = hits[0].face.normal;
-    const p = hits[0].point;
-    const inside = {
-      x: Math.floor(p.x - n.x * 0.01),
-      y: Math.floor(p.y - n.y * 0.01),
-      z: Math.floor(p.z - n.z * 0.01),
-    };
-    return { inside, outside: { x: inside.x + n.x, y: inside.y + n.y, z: inside.z + n.z } };
-  }
 
-  targetCreature() {
-    const meshes = [];
-    if (this.mobs) this.mobs.collectMeshes(meshes);
-    if (this.animals) this.animals.collectMeshes(meshes);
-    if (this.puppets) this.puppets.collectMeshes(meshes);
-    const hits = this.centerRay().intersectObjects(meshes);
-    return hits.length ? hits[0].object.userData.creature : null;
-  }
+
+
+
 
   // Lista de criaturas golpeables (reales si somos anfitrión, títeres si no).
-  hittableCreatures() {
-    const list = [];
-    if (this.mobs) list.push(...this.mobs.zombies);
-    if (this.animals) list.push(...this.animals.animals);
-    if (this.puppets) for (const p of this.puppets.puppets.values()) list.push(p.creature);
-    return list;
-  }
+
 
   // Adoptar un perro (directo si lo simulamos; por red si es un títere del anfitrión).
-  tameDog(creature) {
-    if (this.net && !NET.isHost) {
-      NET.send({ t: 'tame', mob: creature.netId });
-    } else {
-      creature.setTamed('local');
-    }
-    this.ui.toast(t('dogAdopted'), 4000);
-    this.milestone('primerPerro');
-  }
+
 
   // Aplica daño a una criatura (directo si somos anfitrión, por red si no).
-  damageCreature(creature, dmg, dir) {
-    if (this.net && !NET.isHost) {
-      NET.send({ t: 'hit', mob: creature.netId, dmg, kx: dir.x, kz: dir.z });
-    } else {
-      creature.hurt(dmg, dir, 'local');
-    }
-  }
+
 
   // ---- Acciones ----
-  meleeDamage() {
-    const def = ITEMS[this.selectedId()];
-    return def && def.kind === 'weapon' ? def.damage : 1;
-  }
 
-  shootBolt() {
-    if (this.shootCooldown > 0) return;
-    // En supervivencia la ballesta gasta flechas.
-    if (!this.inventory.isFree() && !this.inventory.remove(110, 1)) {
-      this.ui.toast(t('noArrows'));
-      this.shootCooldown = 0.5;
-      return;
-    }
-    this.shootCooldown = 1;
-    const dir = new THREE.Vector3(0, 0, -1).applyQuaternion(this.camera.quaternion);
-    const from = this.player.eyePosition();
-    this.spawnBolt(from, dir, false);
-    if (this.net) {
-      NET.send({ t: 'bolt', x: from.x, y: from.y, z: from.z, dx: dir.x, dy: dir.y, dz: dir.z, hostile: false });
-    }
-  }
+
+
 
   // remote: flecha de otro jugador; solo visual (el daño lo decide quien dispara).
-  spawnBolt(from, dir, hostile, remote = false) {
-    const mesh = new THREE.Mesh(this.boltGeo, hostile ? this.hostileBoltMat : this.boltMat);
-    mesh.position.copy(from);
-    mesh.lookAt(from.clone().add(dir));
-    this.scene.add(mesh);
-    this.bolts.push({ mesh, vel: dir.clone().multiplyScalar(hostile ? 18 : 26), life: 3, hostile, remote });
-  }
 
-  updateBolts(dt) {
-    for (const b of this.bolts) {
-      b.life -= dt;
-      b.vel.y -= (b.hostile ? 3 : 9) * dt; // las flechas enemigas caen menos (mejor puntería)
-      b.mesh.position.addScaledVector(b.vel, dt);
-      const p = b.mesh.position;
-      if (b.life <= 0 || this.world.isSolid(Math.floor(p.x), Math.floor(p.y), Math.floor(p.z))) {
-        b.dead = true;
-        continue;
-      }
-      if (b.hostile) {
-        // Flecha de esqueleto: cada cliente evalúa solo contra SU jugador.
-        const pl = this.player;
-        if (!pl.dead &&
-            Math.hypot(p.x - pl.pos.x, p.y - (pl.pos.y + pl.height / 2), p.z - pl.pos.z) < 0.8) {
-          pl.damage(1);
-          b.dead = true;
-        }
-        continue;
-      }
-      if (b.remote) continue; // flecha ajena: solo visual
-      for (const c of this.hittableCreatures()) {
-        if (c.dead) continue;
-        const dx = p.x - c.pos.x, dy = p.y - (c.pos.y + c.height / 2), dz = p.z - c.pos.z;
-        if (Math.hypot(dx, dy, dz) < 0.5 + c.halfW) {
-          const dir = b.vel.clone().setY(0).normalize();
-          this.damageCreature(c, ITEMS[102].damage, dir);
-          b.dead = true;
-          break;
-        }
-      }
-    }
-    for (const b of this.bolts) {
-      if (b.dead) this.scene.remove(b.mesh);
-    }
-    this.bolts = this.bolts.filter((b) => !b.dead);
-  }
 
-  eat(id) {
-    const def = ITEMS[id];
-    const p = this.player;
-    if (this.map.hunger) {
-      // Con hambre: la comida llena la barra (y cura un poquito).
-      if (p.hunger >= CFG.MAX_HUNGER && p.health >= CFG.MAX_HEALTH) return;
-      if (!this.inventory.remove(id, 1)) return;
-      p.hunger = Math.min(CFG.MAX_HUNGER, p.hunger + def.heal);
-      p.health = Math.min(CFG.MAX_HEALTH, p.health + 1);
-    } else {
-      if (p.health >= CFG.MAX_HEALTH) return;
-      if (!this.inventory.remove(id, 1)) return;
-      p.health = Math.min(CFG.MAX_HEALTH, p.health + def.heal);
-    }
-    this.renderHearts();
-  }
+
+
+
 
   // Nivel de pico en la mano: 0 mano, 1 madera, 2 piedra, 3 hierro.
-  pickTier() {
-    const def = ITEMS[this.selectedId()];
-    return def && def.pickTier ? def.pickTier : 0;
-  }
+
 
   // Dormir / fijar punto de reaparición en una cama.
-  sleep(pos) {
-    this.respawnPoint = { x: pos.x + 0.5, y: pos.y + 1.2, z: pos.z + 0.5 };
-    if (this.map.dayNight && this.daynight.isNight()) {
-      this.daynight.time = 0.25; // amanecer
-      if (this.net) NET.send({ t: 'time', v: 0.25 });
-      this.ui.toast(t('bedSleep'));
-    } else {
-      this.ui.toast(t('bedSpawn'));
-    }
-  }
+
 
   // Sentarse en una silla (clic derecho): fija al jugador sobre el asiento,
   // congela el movimiento y muestra la pose sentada en vista FIFA.
-  sit(pos) {
-    // El asiento (rodilla) queda a ras de la cara superior del bloque silla.
-    this.player.pos.set(pos.x + 0.5, pos.y + 1 - 0.78, pos.z + 0.5);
-    this.player.vel.set(0, 0, 0);
-    this.player.sitting = true;
-    // En mapas con vista FIFA, cambiar a tercera persona para verse sentado.
-    if (this.map.thirdPerson && this.cameraMode !== 'third') {
-      this.sitPrevView = 'pov';
-      this.cameraMode = 'third';
-    }
-    this.ui.toast(t('sitDown'));
-  }
 
-  standUp() {
-    if (!this.player.sitting) return;
-    this.player.sitting = false;
-    if (this.ownAvatar) this.ownAvatar.setSitting(false);
-    if (this.sitPrevView === 'pov') this.cameraMode = 'pov';
-    this.sitPrevView = null;
-    this.ui.toast(t('standUp'));
-  }
 
-  nearTable() {
-    const p = this.player.pos;
-    const px = Math.floor(p.x), py = Math.floor(p.y), pz = Math.floor(p.z);
-    for (let x = px - 6; x <= px + 6; x++) {
-      for (let y = Math.max(1, py - 4); y <= py + 4; y++) {
-        for (let z = pz - 6; z <= pz + 6; z++) {
-          if (this.world.getBlock(x, y, z) === 9) return true;
-        }
-      }
-    }
-    return false;
-  }
 
-  openPicker() {
-    if (!this.map.canBuild || !this.inventory.entries.length ||
-        this.player.dead || this.state.won) return;
-    document.exitPointerLock();
-    this.picker.onClose = this.relockOnClose();
-    this.picker.show(
-      this.atlasCanvas, this.inventory.entries, this.controls.selectedSlot,
-      (i) => this.controls.selectSlot(i)
-    );
-  }
 
-  relockOnClose() {
-    return () => {
-      if (this.player.dead) return;
-      if (this.queuedEgg) { this.queuedEgg = false; this.showEgg(); return; }
-      this.ui.showPlaying(false); // overlay visible hasta que el pointer lock engancha
-      this.controls.lock();
-    };
-  }
+
+
+
+
+
 
   // ---- Easter eggs: trivia + mensaje/dato curioso + premio de materiales ----
-  showEgg() {
-    const msg = Eggs.reward();
-    const trivia = Eggs.nextTrivia();
-    let prize = null;
-    if (!this.inventory.isFree()) {
-      const [id, n] = EGG_PRIZES[Math.floor(Math.random() * EGG_PRIZES.length)];
-      prize = {
-        text: `${nameOf(id)} ×${n}`,
-        grant: () => { this.inventory.add(id, n); },
-      };
-    }
-    document.exitPointerLock();
-    this.eggUI.onClose = this.relockOnClose();
-    this.eggUI.start(trivia, msg, prize);
-  }
 
-  milestone(flag) {
-    if (!Eggs.once(flag)) return;
-    if (this.crafting.open || this.chestUI.open) this.queuedEgg = true;
-    else this.showEgg();
-  }
 
-  craftAction() {
-    return (recipe) => {
-      if (!this.inventory.canAfford(recipe.cost)) return;
-      this.inventory.pay(recipe.cost);
-      this.inventory.add(recipe.out.id, recipe.out.n);
-      this.ui.toast(`${nameOf(recipe.out.id)} ✔`);
-      if ([100, 101, 102, 114, 115, 116].includes(recipe.out.id)) this.milestone('primerArma');
-    };
-  }
 
-  openCrafting() {
-    if (!this.map.crafting || this.player.dead || this.state.won) return;
-    document.exitPointerLock();
-    this.crafting.onClose = this.relockOnClose();
-    this.crafting.show(this.atlasCanvas, this.inventory, this.nearTable(), this.craftAction());
-  }
 
-  openFurnace() {
-    if (!this.map.crafting || this.player.dead || this.state.won) return;
-    document.exitPointerLock();
-    this.crafting.onClose = this.relockOnClose();
-    this.crafting.show(
-      this.atlasCanvas, this.inventory, true, this.craftAction(),
-      FURNACE_RECIPES, 'furnaceTitle'
-    );
-  }
 
-  openChest(x, y, z) {
-    if (this.inventory.isFree() || this.player.dead || this.state.won) return;
-    const key = `${x},${y},${z}`;
-    if (!this.chests[key]) this.chests[key] = [];
-    document.exitPointerLock();
-    this.chestUI.onClose = this.relockOnClose();
-    this.chestUI.show(this.atlasCanvas, this.chests[key], this.inventory);
-  }
 
-  bindControls() {
-    this.controls.onLeftClick = () => {
-      if (this.player.dead || this.state.won) return;
-      if (this.map.onClick && this.map.onClick(this)) return;
 
-      // Ballesta: dispara en vez de golpear.
-      const sel = ITEMS[this.selectedId()];
-      if (sel && sel.kind === 'crossbow') { this.shootBolt(); return; }
 
-      const creature = this.targetCreature();
-      if (creature) {
-        const dir = new THREE.Vector3()
-          .subVectors(creature.pos, this.player.pos).setY(0).normalize();
-        this.damageCreature(creature, this.meleeDamage(), dir);
-        return;
-      }
-      if (!this.map.canBuild) return;
-      const target = this.targetBlock();
-      if (target && target.inside.y > 0) {
-        const { x, y, z } = target.inside;
-        const id = this.world.getBlock(x, y, z);
-        const def = BLOCKS[id];
-        // Minerales duros: exigen nivel de pico (solo en supervivencia).
-        if (!this.inventory.isFree() && def && def.needTier && this.pickTier() < def.needTier) {
-          this.ui.toast(t('needPick'));
-          return;
-        }
-        this.world.setBlock(x, y, z, 0);
-        if (this.net) NET.send({ t: 'block', x, y, z, id: 0 });
-        trackBlockChange(this, x, y, z, 0);
-        if (!this.inventory.isFree()) {
-          if (id === 6) {
-            // Hojas: a veces sueltan manzana o retoño.
-            const r = Math.random();
-            if (r < 0.12) { this.inventory.add(117, 1); this.ui.toast(`${t('gotFood')} ${nameOf(117)}!`); }
-            else if (r < 0.3) this.inventory.add(22, 1);
-          } else {
-            this.inventory.add(dropOf(id), 1);
-          }
-        }
-        if (id === 12) this.showEgg(); // bloque corazón encontrado
-        // Al romper un cofre, su contenido pasa al inventario.
-        if (id === 11) {
-          const key = `${x},${y},${z}`;
-          for (const [itemId, n] of this.chests[key] || []) this.inventory.add(itemId, n);
-          delete this.chests[key];
-        }
-        if (this.map.onBreak) this.map.onBreak(this, x, y, z, id);
-      }
-    };
 
-    this.controls.onRightClick = () => {
-      if (this.player.dead || this.state.won) return;
-      if (this.player.sitting) { this.standUp(); return; }
-      if (this.map.onRightClick && this.map.onRightClick(this)) return;
 
-      // Perro salvaje en la mira: se adopta con un hueso.
-      const creature = this.targetCreature();
-      if (creature && creature.species === 'dog' && !creature.tamed) {
-        if (this.selectedId() === 118 && this.inventory.remove(118, 1)) {
-          this.tameDog(creature);
-        } else {
-          this.ui.toast(t('dogNeedBone'));
-        }
-        return;
-      }
 
-      const target = this.targetBlock();
-      // Clic derecho sobre mesa / horno / cofre / cama: usar el bloque.
-      if (target) {
-        const targetId = this.world.getBlock(target.inside.x, target.inside.y, target.inside.z);
-        if (this.map.crafting && targetId === 9) { this.openCrafting(); return; }
-        if (this.map.crafting && targetId === 10) { this.openFurnace(); return; }
-        if (targetId === 13 && this.map.onSign) { this.map.onSign(this, target.inside); return; }
-        if (targetId === 23) { this.sleep(target.inside); return; }
-        if (targetId === 25) {
-          if (this.player.sitting) this.standUp(); else this.sit(target.inside);
-          return;
-        }
-        if (!this.inventory.isFree() && targetId === 11) {
-          this.openChest(target.inside.x, target.inside.y, target.inside.z);
-          return;
-        }
-      }
 
-      const id = this.selectedId();
-      const def = id !== null ? ITEMS[id] : null;
-      if (def && def.kind === 'food') { this.eat(id); return; }
 
-      if (!this.map.canBuild || id === null || !isBlockId(id)) return;
-      if (!target) return;
-      // Apuntar a una planta la reemplaza; si no, se construye en la cara.
-      const targetDef = BLOCKS[this.world.getBlock(target.inside.x, target.inside.y, target.inside.z)];
-      const spot = targetDef && targetDef.cross ? target.inside : target.outside;
-      const { x, y, z } = spot;
-      if (y < 1 || y >= CFG.HEIGHT) return;
-      const curDef = BLOCKS[this.world.getBlock(x, y, z)];
-      if (this.world.getBlock(x, y, z) !== 0 && !(curDef && curDef.solid === false)) return;
-      const placedDef = BLOCKS[id];
-      if (placedDef.solid !== false && this.player.wouldCollide(x, y, z)) return;
-      if (this.inventory.count(id) < 1) return;
-      this.world.setBlock(x, y, z, id);
-      if (this.net) NET.send({ t: 'block', x, y, z, id });
-      trackBlockChange(this, x, y, z, id);
-      this.inventory.remove(id, 1);
-    };
-
-    this.controls.onSlotChange = () => this.refreshHotbar();
-    this.controls.onOpenCraft = () => this.openCrafting();
-    this.controls.onOpenPicker = () => this.openPicker();
-    // En modo kart, Espacio/Enter disparan lo mismo que el clic (láser).
-    this.controls.onFireKey = this.map.driving && this.map.onClick
-      ? () => this.map.onClick(this)
-      : null;
-    this.controls.onToggleView = () => {
-      if (!this.map.thirdPerson) return;
-      this.cameraMode = this.cameraMode === 'pov' ? 'third' : 'pov';
-      this.ui.toast(this.cameraMode === 'third' ? t('viewFifa') : t('viewPov'));
-    };
-  }
 
   // Tu personaje visible en vista FIFA (camina cuando te mueves).
-  updateOwnAvatar(dt) {
-    const show = this.cameraMode === 'third' && this.map.ownAvatar && !this.player.dead;
-    if (!show) {
-      if (this.ownAvatar) this.ownAvatar.group.visible = false;
-      return;
-    }
-    if (!this.ownAvatar) {
-      this.ownAvatar = new Humanoid(this.scene, 0, 0, 0, Character.appearance());
-      this.lastOwnPos.copy(this.player.pos);
-    }
-    const g = this.ownAvatar.group;
-    g.visible = true;
-    g.position.copy(this.player.pos);
-    g.rotation.y = this.controls.yaw + Math.PI;
-    if (this.player.sitting !== this.ownAvatar.sitting) {
-      this.ownAvatar.setSitting(this.player.sitting);
-    }
-    if (this.player.sitting) { this.lastOwnPos.copy(this.player.pos); return; }
-    const speed = this.player.pos.distanceTo(this.lastOwnPos) / Math.max(dt, 0.001);
-    this.lastOwnPos.copy(this.player.pos);
-    if (speed > 0.8) {
-      this.ownAvatarPhase += dt * 10;
-      this.ownAvatar.swingLegs(this.ownAvatarPhase);
-    } else {
-      this.ownAvatar.swingLegs(0);
-    }
-  }
 
-  respawnPlayer() {
-    if (this.sitPrevView === 'pov') this.cameraMode = 'pov';
-    this.sitPrevView = null;
-    if (this.ownAvatar) this.ownAvatar.setSitting(false);
-    if (this.mobs) this.mobs.clear();
-    this.player.respawn(this.respawnPoint || this.spawn);
-    this.renderHearts();
-  }
+
+
 
   // ---- Bucle ----
-  update(dt) {
-    this.world.update(this.player.pos.x, this.player.pos.z);
-    const active = this.controls.locked && !this.player.dead && !this.state.won;
 
-    // Sentado: cualquier tecla de movimiento levanta al jugador.
-    if (this.player.sitting && active) {
-      const k = this.controls.keys;
-      if (['KeyW', 'KeyA', 'KeyS', 'KeyD', 'Space',
-           'ArrowUp', 'ArrowDown', 'ArrowLeft', 'ArrowRight'].some((c) => k.has(c))) {
-        this.standUp();
-      }
-    }
 
-    if (active) {
-      this.player.update(dt, this.controls);
-      if (this.map.update) this.map.update(this, dt);
-      this.shootCooldown = Math.max(0, this.shootCooldown - dt);
-      this.daynight.update(this.map.dayNight ? dt : 0, this.player.pos);
-      // Sobrevivir la primera noche: amanecer estando vivo.
-      if (this.map.dayNight) {
-        const night = this.daynight.isNight();
-        if (this.wasNight && !night) {
-          this.milestone('primerAmanecer');
-          this.state.day++;
-          if (this.map.hunger) {
-            this.ui.setInfo(`☀️ ${t('dayLabel')} ${this.state.day}`);
-            this.ui.toast(`☀️ ${t('dayLabel')} ${this.state.day}`);
-          }
-        }
-        this.wasNight = night;
-      }
-      // La dificultad sube con los días: cada amanecer permite un mob más.
-      const mobCap = this.map.hunger ? Math.min(2 + this.state.day, 10) : CFG.MAX_ZOMBIES;
-      if (this.mobs) this.mobs.update(dt, this.daynight.isNight(), mobCap);
-      if (this.animals) this.animals.update(dt, this.daynight.isNight());
-      if (this.map.canBuild) updateSaplings(this, dt);
-      this.updateBolts(dt);
-    } else {
-      this.daynight.update(0, this.player.pos);
-    }
 
-    if (this.torchLights) updateTorchLights(this, dt);
 
-    // Multijugador: avatares, títeres de mobs y sincronización.
-    for (const av of this.avatars.values()) av.update(dt);
-    if (this.puppets) this.puppets.update(dt);
-    this.netTick(dt);
-    if (this.minimap) this.minimap.update(dt);
 
-    this.updateOwnAvatar(dt);
-    if (this.cameraMode === 'third') {
-      // Cámara tipo FIFA: detrás y arriba del jugador, mirándolo.
-      const yaw = this.controls.yaw;
-      const pos = this.player.pos.clone();
-      pos.x += Math.sin(yaw) * 4.5;
-      pos.z += Math.cos(yaw) * 4.5;
-      pos.y += Math.max(1.2, 3.2 - this.controls.pitch * 3);
-      // Acercar la cámara si un bloque se interpone (montañas, cuevas, muros).
-      const eye = this.player.eyePosition();
-      const dir = pos.clone().sub(eye);
-      const len = dir.length();
-      dir.normalize();
-      let dist = len;
-      for (let s = 0.4; s <= len; s += 0.25) {
-        const p = eye.clone().addScaledVector(dir, s);
-        if (this.world.isSolid(Math.floor(p.x), Math.floor(p.y), Math.floor(p.z))) {
-          dist = Math.max(0.4, s - 0.4);
-          break;
-        }
-      }
-      this.camera.position.copy(eye).addScaledVector(dir, dist);
-      this.camera.lookAt(
-        this.player.pos.x, this.player.pos.y + 1.3, this.player.pos.z
-      );
-    } else {
-      this.camera.position.copy(this.player.eyePosition());
-      this.camera.rotation.set(0, 0, 0);
-      this.camera.rotateY(this.controls.yaw);
-      this.camera.rotateX(this.controls.pitch);
-    }
 
-    this.highlight.visible = false;
-    if (active && this.map.canBuild) {
-      const target = this.targetBlock();
-      if (target) {
-        this.highlight.position.set(
-          target.inside.x + 0.5, target.inside.y + 0.5, target.inside.z + 0.5
-        );
-        this.highlight.visible = true;
-      }
-    }
 
-    // Guardado automático cada 5 s.
-    this.saveTimer += dt;
-    if (this.saveTimer > 5) {
-      this.saveTimer = 0;
-      this.save();
-    }
 
-    this.renderer.render(this.scene, this.camera);
-  }
 
-  save() {
-    if (!this.map.save) return;
-    Storage.saveSlot(this.mapKey, this.slot, {
-      edits: this.world.edits,
-      player: {
-        x: this.player.pos.x, y: this.player.pos.y, z: this.player.pos.z,
-        health: this.player.health,
-        hunger: this.player.hunger,
-      },
-      time: this.daynight.time,
-      day: this.state.day,
-      respawn: this.respawnPoint,
-      inventory: this.inventory.serialize(),
-      chests: this.chests,
-      // Perros adoptados por este jugador (si somos invitados, conservar los guardados).
-      pets: this.animals
-        ? this.animals.animals
-            .filter((a) => a.tamed && a.owner === 'local' && !a.dead)
-            .map((a) => [a.pos.x, a.pos.y, a.pos.z])
-        : this.savedPets || [],
-      updated: Date.now(),
-    });
-    this.world.dirty = false;
-  }
-
-  win() {
-    this.state.won = true;
-    const secs = Math.round(this.state.elapsed * 10) / 10;
-    const prev = this.savedMeta.best;
-    const isRecord = prev === undefined || secs < prev;
-    if (isRecord) {
-      this.savedMeta.best = secs;
-      Storage.save(this.scoreKey, { best: secs });
-    }
-    const m = Math.floor(secs / 60);
-    this.ui.showWin(`${m}:${(secs % 60).toFixed(1).padStart(4, '0')}`, isRecord);
-    document.exitPointerLock();
-  }
-
-  resize() {
-    this.camera.aspect = window.innerWidth / window.innerHeight;
-    this.camera.updateProjectionMatrix();
-  }
-
-  stop() {
-    this.save();
-    this.daynight.sky.dispose();
-    if (this.ownAvatar) this.ownAvatar.die();
-    if (this.minimap) this.minimap.dispose();
-    if (this.map.onStop) this.map.onStop(this);
-    if (this.net) NET.leave();
-    for (const av of this.avatars.values()) av.dispose();
-    this.avatars.clear();
-    if (this.puppets) this.puppets.clear();
-    this.ui.setNetStatus(null);
-    // Cerrar modales sin reenganchar el pointer lock.
-    this.crafting.onClose = null;
-    this.chestUI.onClose = null;
-    this.eggUI.onClose = null;
-    this.picker.onClose = null;
-    this.crafting.close();
-    this.chestUI.close();
-    this.eggUI.close();
-    this.picker.close();
-    if (this.mobs) this.mobs.clear();
-    if (this.animals) this.animals.clear();
-    if (this.torchLights) {
-      for (const light of this.torchLights) this.scene.remove(light);
-      this.torchLights = null;
-    }
-    for (const b of this.bolts) this.scene.remove(b.mesh);
-    this.bolts = [];
-    this.world.dispose();
-    this.highlight.geometry.dispose();
-    this.highlight.material.dispose();
-    this.boltGeo.dispose();
-    this.boltMat.dispose();
-    this.hostileBoltMat.dispose();
-    this.controls.onLeftClick = null;
-    this.controls.onRightClick = null;
-    this.controls.onSlotChange = null;
-    this.controls.onOpenCraft = null;
-    this.controls.onFireKey = null;
-  }
 }
+
+Object.assign(Game.prototype, GameCombat, GameInteractions, GameLifecycle);

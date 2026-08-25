@@ -7,11 +7,13 @@ const NET = {
   peers: new Set(),
   handlers: null,
   room: null,
+  player: null,
   retryTimer: null,
 
-  join(roomName, handlers) {
+  join(roomName, handlers, player) {
     this.room = roomName;
     this.handlers = handlers;
+    this.player = player || null;
     this.connect();
   },
 
@@ -20,7 +22,7 @@ const NET = {
     this.isHost = false;
     const proto = location.protocol === 'https:' ? 'wss:' : 'ws:';
     this.ws = new WebSocket(`${proto}//${location.host}`);
-    this.ws.onopen = () => this.send({ t: 'join', room: this.room });
+    this.ws.onopen = () => this.send({ t: 'join', room: this.room, player: this.player });
     this.ws.onmessage = (e) => {
       let msg;
       try { msg = JSON.parse(e.data); } catch (err) { return; }
@@ -62,6 +64,7 @@ const NET = {
     this.isHost = false;
     this.peers = new Set();
     this.room = null;
+    this.player = null;
   },
 
   active() {

@@ -19,9 +19,10 @@ class RemoteAvatar {
     if (app) this.model.build({ ...Character.DEFAULT, ...app });
   }
 
-  setTarget(x, y, z, yaw, sit) {
+  setTarget(x, y, z, yaw, sit, down) {
     this.pos.set(x, y, z);
     this.yaw = yaw;
+    this.down = !!down; // derribado por una barrida
     const sitting = !!sit;
     if (sitting !== this.model.sitting) this.model.setSitting(sitting);
   }
@@ -30,6 +31,14 @@ class RemoteAvatar {
     const g = this.model.group;
     g.position.lerp(this.pos, Math.min(1, dt * 12));
     g.rotation.y = this.yaw + Math.PI;
+    // Derribado: tumbado en el suelo, sin animación de piernas.
+    if (this.down) {
+      g.rotation.x = -Math.PI / 2.3;
+      this.model.swingLegs(0);
+      this.lastPos.copy(g.position);
+      return;
+    }
+    g.rotation.x = 0;
     if (this.model.sitting) { this.lastPos.copy(g.position); return; }
     const speed = g.position.distanceTo(this.lastPos) / Math.max(dt, 0.001);
     this.lastPos.copy(g.position);
@@ -74,6 +83,7 @@ class PuppetManager {
     if (e.ty === 'zombie') c = new Zombie(this.scene, e.x, e.y, e.z);
     else if (e.ty === 'skeleton') c = new Skeleton(this.scene, e.x, e.y, e.z, () => {});
     else if (e.ty === 'spider') c = new Spider(this.scene, e.x, e.y, e.z);
+    else if (e.ty === 'creeper') c = new Creeper(this.scene, e.x, e.y, e.z, () => {});
     else c = new Animal(this.scene, e.ty, e.x, e.y, e.z);
     c.netId = e.k; // usar el id del anfitrión para reportar golpes
     return c;

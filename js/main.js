@@ -29,18 +29,28 @@
   Storage.migrate(); // guardados antiguos → slot 1
   const menuBg = new MenuBackground(renderer, materials);
 
-  function startGame(mapKey, slot = 1) {
+  function startGame(mapKey, slot = 1, gameId = null) {
     if (game) game.stop();
-    game = new Game(mapKey, ctx, slot);
+    game = new Game(mapKey, ctx, slot, gameId);
     ui.showMenu(false);
     ui.hideEndScreens();
     ui.showPlaying(false); // overlay "haz clic para jugar"
   }
 
+  // Antes de una partida compartida, asegurar un nombre (identidad para el estado guardado).
+  function startServerGame(mapKey, gameId) {
+    if (!Storage.playerName()) {
+      const name = prompt(t('askPlayerName'));
+      if (!name || !name.trim()) return; // sin nombre no arrancamos la compartida
+      Storage.setPlayerName(name);
+    }
+    startGame(mapKey, 1, gameId);
+  }
+
   // Mapas con guardado: elegir partida; con variantes: elegir circuito.
   function selectMap(mapKey) {
     if (MAPS[mapKey].save) {
-      ui.showSlots(mapKey, (slot) => startGame(mapKey, slot));
+      ui.showSlots(mapKey, (slot) => startGame(mapKey, slot), (id) => startServerGame(mapKey, id));
     } else if (MAPS[mapKey].variants) {
       ui.showVariants(mapKey, (slot) => startGame(mapKey, slot));
     } else {

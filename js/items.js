@@ -55,6 +55,11 @@ const RECIPES = [
   { out: { id: 25, n: 2 }, cost: [[7, 2], [103, 2]],  table: true },  // sillas
   { out: { id: 26, n: 1 }, cost: [[7, 6]],            table: true },  // estantería
   { out: { id: 27, n: 3 }, cost: [[20, 2]],           table: false }, // alfombras (flores tejidas)
+  { out: { id: 28, n: 1 }, cost: [[7, 2], [20, 1]],   table: true },  // cuadro
+  { out: { id: 29, n: 1 }, cost: [[111, 1], [103, 1]], table: true }, // farol
+  { out: { id: 30, n: 2 }, cost: [[3, 1], [4, 1]],    table: true },  // floreros
+  { out: { id: 31, n: 4 }, cost: [[4, 2]],            table: true },  // vidrio
+  { out: { id: 32, n: 4 }, cost: [[3, 4]],            table: true },  // ladrillos de piedra
 ];
 
 // Recetas del horno (clic derecho sobre un horno): carne cruda + leña.

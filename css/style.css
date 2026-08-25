@@ -480,6 +480,7 @@ canvas.game { display: block; }
 .slot-new:hover { background: #3a85bd; }
 .slot-del { margin: 0; padding: 10px 14px; }
 .slots-full { color: #ffb56a; }
+.slots-heading { color: #cfe3ff; font-weight: bold; margin: 6px 0 2px; text-align: center; }
 
 #damage-flash {
   position: absolute; inset: 0;

@@ -19,6 +19,7 @@ class Player {
     this.regenTimer = 0;
     this.inWater = false;
     this.dead = false;
+    this.stunTimer = 0; // derribado por una barrida (fútbol)
   }
 
   // spawn: {x, z, y?} — si no trae y, se usa la superficie del terreno.
@@ -46,6 +47,17 @@ class Player {
     // Sentado en una silla: sin movimiento ni física, pero el hambre sigue.
     if (this.sitting) {
       this.vel.set(0, 0, 0);
+      this.updateVitals(dt);
+      return;
+    }
+
+    // Derribado por una barrida: sin control un momento, con inercia y gravedad.
+    if (this.stunTimer > 0) {
+      this.stunTimer -= dt;
+      this.vel.x *= 0.86;
+      this.vel.z *= 0.86;
+      this.vel.y = Math.max(this.vel.y + CFG.GRAVITY * dt, -50);
+      moveBody(this.world, this, dt);
       this.updateVitals(dt);
       return;
     }

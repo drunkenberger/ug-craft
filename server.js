@@ -9,6 +9,88 @@ const os = require('os');
 
 const PORT = Number(process.env.PORT) || 8940;
 const ROOT = __dirname;
+
+// ---- Persistencia de partidas compartidas ----
+// Los mapas de PERSIST_MAPS guardan cada partida en worlds/<mapa>__<id>.json, así
+// se pueden empezar en una máquina y seguir en otra sin perder mundo ni estado.
+// La sala se llama "<mapa>#<id>"; el mundo (edits) es compartido y el estado de
+// cada jugador (posición, inventario, vida, hambre) se guarda por nombre.
+const WORLDS_DIR = path.join(ROOT, 'worlds');
+const PERSIST_MAPS = new Set(['survival', 'creative']);
+try { fs.mkdirSync(WORLDS_DIR, { recursive: true }); } catch (e) { /* ya existe */ }
+
+function baseMap(name) { return String(name).split('#')[0]; }
+function partId(name) { const i = String(name).indexOf('#'); return i < 0 ? null : name.slice(i + 1); }
+function isPersistent(name) { return partId(name) && PERSIST_MAPS.has(baseMap(name)); }
+function safe(s) { return String(s).replace(/[^a-z0-9_-]/gi, ''); }
+function worldFile(map, id) { return path.join(WORLDS_DIR, `${safe(map)}__${safe(id)}.json`); }
+
+function loadRoomFromDisk(name) {
+  try {
+    const d = JSON.parse(fs.readFileSync(worldFile(baseMap(name), partId(name)), 'utf8'));
+    return {
+      name: d.name || '', edits: d.edits || {}, time: d.time ?? null,
+      players: d.players || {}, updated: d.updated || 0,
+    };
+  } catch (e) {
+    return null; // partida sin guardar todavía
+  }
+}
+
+const saveTimers = new Map(); // sala → timeout (escritura agrupada)
+
+function scheduleSave(name) {
+  if (!isPersistent(name) || saveTimers.has(name)) return;
+  saveTimers.set(name, setTimeout(() => { saveTimers.delete(name); flushRoom(name); }, 3000));
+}
+
+function flushRoom(name) {
+  const r = rooms.get(name);
+  if (!r || !isPersistent(name)) return;
+  try {
+    fs.writeFileSync(worldFile(baseMap(name), partId(name)), JSON.stringify({
+      name: r.name || '', edits: r.edits, time: r.time, players: r.players || {}, updated: Date.now(),
+    }));
+  } catch (e) {
+    console.log(`[!] No se pudo guardar la partida "${name}": ${e.message}`);
+  }
+}
+
+// Lista las partidas guardadas de un mapa (para el menú).
+function listGames(map) {
+  const out = [];
+  let files = [];
+  try { files = fs.readdirSync(WORLDS_DIR); } catch (e) { return out; }
+  const prefix = safe(map) + '__';
+  for (const f of files) {
+    if (!f.startsWith(prefix) || !f.endsWith('.json')) continue;
+    const id = f.slice(prefix.length, -5);
+    try {
+      const d = JSON.parse(fs.readFileSync(path.join(WORLDS_DIR, f), 'utf8'));
+      out.push({ id, name: d.name || '', updated: d.updated || 0 });
+    } catch (e) { /* archivo corrupto: omitir */ }
+  }
+  out.sort((a, b) => b.updated - a.updated);
+  return out;
+}
+
+// Crea una partida nueva (opcionalmente sembrada con un mundo local subido).
+function createGame(map, name, edits, time, players) {
+  const id = Date.now().toString(36) + crypto.randomBytes(2).toString('hex');
+  const roomName = `${map}#${id}`;
+  rooms.set(roomName, {
+    clients: new Map(), hostId: null,
+    name: name || '', edits: edits || {}, time: time ?? null, players: players || {},
+  });
+  flushRoom(roomName);
+  return { id, name: name || '' };
+}
+
+function deleteGame(map, id) {
+  const roomName = `${map}#${id}`;
+  rooms.delete(roomName);
+  try { fs.unlinkSync(worldFile(map, id)); return true; } catch (e) { return false; }
+}
 const MIME = {
   '.html': 'text/html; charset=utf-8',
   '.js': 'text/javascript; charset=utf-8',
@@ -17,9 +99,46 @@ const MIME = {
   '.ico': 'image/x-icon',
 };
 
-// ---- HTTP: archivos estáticos ----
+function sendJSON(res, code, obj) {
+  const body = JSON.stringify(obj);
+  res.writeHead(code, { 'Content-Type': 'application/json; charset=utf-8', 'Cache-Control': 'no-store' });
+  res.end(body);
+}
+
+// ---- HTTP: API de partidas + archivos estáticos ----
 const server = http.createServer((req, res) => {
-  let file = decodeURIComponent(req.url.split('?')[0]);
+  const url = new URL(req.url, 'http://x');
+
+  // API de partidas compartidas (solo mapas persistentes).
+  if (url.pathname === '/api/games') {
+    const map = safe(url.searchParams.get('map') || '');
+    if (!PERSIST_MAPS.has(map)) { sendJSON(res, 400, { error: 'mapa inválido' }); return; }
+
+    if (req.method === 'GET') { sendJSON(res, 200, { games: listGames(map) }); return; }
+
+    if (req.method === 'POST') { // crear (opcionalmente sembrada con un mundo local subido)
+      let body = '';
+      req.on('data', (c) => { body += c; if (body.length > 8e6) req.destroy(); });
+      req.on('end', () => {
+        let d = {};
+        try { d = JSON.parse(body || '{}'); } catch (e) { sendJSON(res, 400, { error: 'json inválido' }); return; }
+        const existing = listGames(map).length;
+        const name = (d.name && String(d.name).slice(0, 40)) || `Partida ${existing + 1}`;
+        sendJSON(res, 200, createGame(map, name, d.edits || {}, d.time ?? null, d.players || {}));
+      });
+      return;
+    }
+
+    if (req.method === 'DELETE') {
+      const id = safe(url.searchParams.get('id') || '');
+      sendJSON(res, 200, { ok: id ? deleteGame(map, id) : false });
+      return;
+    }
+    sendJSON(res, 405, { error: 'método no permitido' });
+    return;
+  }
+
+  let file = decodeURIComponent(url.pathname);
   if (file === '/') file = '/index.html';
   const full = path.join(ROOT, path.normalize(file));
   if (!full.startsWith(ROOT)) { res.writeHead(403); res.end(); return; }
@@ -87,7 +206,16 @@ let nextId = 1;
 const rooms = new Map(); // nombre → { clients: Map(id→socket), hostId, edits, time }
 
 function room(name) {
-  if (!rooms.has(name)) rooms.set(name, { clients: new Map(), hostId: null, edits: {}, time: null });
+  if (!rooms.has(name)) {
+    const disk = isPersistent(name) ? loadRoomFromDisk(name) : null;
+    rooms.set(name, {
+      clients: new Map(), hostId: null,
+      name: disk ? disk.name : '',
+      edits: disk ? disk.edits : {},
+      time: disk ? disk.time : null,
+      players: disk ? disk.players : {},
+    });
+  }
   return rooms.get(name);
 }
 
@@ -106,6 +234,7 @@ function handleMessage(sock, state, msg) {
 
   if (msg.t === 'join') {
     state.room = String(msg.room || 'mundo');
+    state.player = safe(msg.player || '').toLowerCase() || null; // identidad para el estado guardado
     const rm = room(state.room);
     rm.clients.set(state.id, sock);
     if (rm.hostId === null) rm.hostId = state.id;
@@ -113,6 +242,7 @@ function handleMessage(sock, state, msg) {
       t: 'welcome', id: state.id, host: rm.hostId === state.id,
       peers: [...rm.clients.keys()].filter((i) => i !== state.id),
       edits: rm.edits, time: rm.time,
+      pstate: state.player ? (rm.players[state.player] || null) : null, // estado guardado de este jugador
     });
     broadcast(rm, { t: 'peer-join', id: state.id }, state.id);
     console.log(`[+] Jugador ${state.id} entró a "${state.room}" (${rm.clients.size} en línea)`);
@@ -121,15 +251,23 @@ function handleMessage(sock, state, msg) {
   if (!r) return;
 
   switch (msg.t) {
-    case 'edits': // el anfitrión sube su mundo guardado al crear la sala
-      Object.assign(r.edits, msg.edits || {});
+    case 'edits': // en minijuegos el anfitrión comparte su mundo; en partidas manda el servidor
+      if (!isPersistent(state.room)) Object.assign(r.edits, msg.edits || {});
+      break;
+    case 'pstate': // estado personal del jugador (pos/inventario/vida/hambre) por partida
+      if (isPersistent(state.room) && state.player) {
+        r.players[state.player] = msg.state || {};
+        scheduleSave(state.room);
+      }
       break;
     case 'block':
       r.edits[`${msg.x},${msg.y},${msg.z}`] = msg.id;
+      scheduleSave(state.room);
       broadcast(r, msg, state.id);
       break;
     case 'time':
       r.time = msg.v;
+      scheduleSave(state.room);
       broadcast(r, msg, state.id);
       break;
     case 'pos':
@@ -181,7 +319,10 @@ function handleDisconnect(state) {
     r.hostId = r.clients.keys().next().value ?? null;
     if (r.hostId !== null) broadcast(r, { t: 'host', id: r.hostId });
   }
-  if (r.clients.size === 0) rooms.delete(state.room); // el mundo vive en el guardado del anfitrión
+  if (r.clients.size === 0) {
+    if (isPersistent(state.room)) { flushRoom(state.room); rooms.delete(state.room); } // queda en disco
+    else rooms.delete(state.room);                                                     // minijuegos: se reinician
+  }
 }
 
 // Latido: ping cada 5 s; si un cliente no responde en 15 s se purga
@@ -251,4 +392,10 @@ server.listen(PORT, () => {
   }
   console.log('');
   console.log('   Deja esta ventana abierta mientras juegan. Ctrl+C para apagar.');
+});
+
+// Al apagar, volcar los mundos compartidos pendientes a disco.
+process.on('SIGINT', () => {
+  for (const name of rooms.keys()) if (isPersistent(name)) flushRoom(name);
+  process.exit(0);
 });

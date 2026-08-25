@@ -261,6 +261,76 @@ const TILE_PAINTERS = {
     ctx.fillRect(x0 + 7, y0 + 7, 2, 2); // rombo central
     ctx.fillRect(x0 + 6, y0 + 8, 4, 1); ctx.fillRect(x0 + 8, y0 + 6, 1, 4);
   },
+  54: (ctx, x0, y0, rng) => { // cuadro: marco de madera con paisaje
+    TILE_PAINTERS[8](ctx, x0, y0, rng);
+    ctx.fillStyle = 'rgb(72,48,28)';
+    ctx.fillRect(x0, y0, 16, 16);
+    ctx.fillStyle = 'rgb(120,190,230)';
+    ctx.fillRect(x0 + 2, y0 + 2, 12, 7);
+    ctx.fillStyle = 'rgb(80,150,70)';
+    ctx.fillRect(x0 + 2, y0 + 9, 12, 5);
+    ctx.fillStyle = 'rgb(245,215,80)';
+    ctx.fillRect(x0 + 10, y0 + 3, 3, 3);
+    ctx.fillStyle = 'rgb(52,110,55)';
+    ctx.fillRect(x0 + 4, y0 + 7, 4, 7);
+  },
+  55: (ctx, x0, y0, rng) => { // farol: metal oscuro con luz
+    paintNoise(ctx, x0, y0, rng, [55, 50, 45], 12);
+    ctx.fillStyle = 'rgb(32,28,24)';
+    ctx.fillRect(x0 + 5, y0 + 1, 6, 2);
+    ctx.fillRect(x0 + 4, y0 + 12, 8, 2);
+    ctx.fillRect(x0 + 4, y0 + 4, 2, 8);
+    ctx.fillRect(x0 + 10, y0 + 4, 2, 8);
+    ctx.fillStyle = 'rgb(255,210,90)';
+    ctx.fillRect(x0 + 6, y0 + 4, 4, 8);
+    ctx.fillStyle = 'rgb(255,245,165)';
+    ctx.fillRect(x0 + 7, y0 + 6, 2, 3);
+  },
+  56: (ctx, x0, y0, rng) => { // florero arriba
+    paintNoise(ctx, x0, y0, rng, [160, 95, 70], 12);
+    ctx.fillStyle = 'rgb(80,55,40)';
+    ctx.fillRect(x0 + 5, y0 + 5, 6, 6);
+    ctx.fillStyle = 'rgb(210,60,85)';
+    ctx.fillRect(x0 + 4, y0 + 2, 3, 3);
+    ctx.fillRect(x0 + 9, y0 + 2, 3, 3);
+    ctx.fillStyle = 'rgb(70,150,60)';
+    ctx.fillRect(x0 + 7, y0 + 4, 1, 4);
+    ctx.fillRect(x0 + 9, y0 + 4, 1, 4);
+  },
+  57: (ctx, x0, y0, rng) => { // florero lado
+    ctx.clearRect(x0, y0, ATLAS.TILE, ATLAS.TILE);
+    ctx.fillStyle = 'rgb(170,95,70)';
+    ctx.fillRect(x0 + 5, y0 + 6, 6, 8);
+    ctx.fillStyle = 'rgb(110,65,50)';
+    ctx.fillRect(x0 + 6, y0 + 4, 4, 3);
+    ctx.fillRect(x0 + 4, y0 + 13, 8, 2);
+    ctx.fillStyle = 'rgb(65,145,60)';
+    ctx.fillRect(x0 + 7, y0 + 1, 1, 5);
+    ctx.fillRect(x0 + 9, y0 + 2, 1, 4);
+    ctx.fillStyle = 'rgb(220,70,100)';
+    ctx.fillRect(x0 + 6, y0 + 1, 3, 2);
+    ctx.fillRect(x0 + 8, y0 + 2, 3, 2);
+  },
+  58: (ctx, x0, y0, rng) => { // vidrio claro
+    ctx.clearRect(x0, y0, ATLAS.TILE, ATLAS.TILE);
+    ctx.fillStyle = 'rgba(180,230,255,0.5)';
+    ctx.fillRect(x0, y0, 16, 16);
+    ctx.fillStyle = 'rgb(230,250,255)';
+    ctx.fillRect(x0 + 2, y0 + 2, 4, 1);
+    ctx.fillRect(x0 + 2, y0 + 3, 1, 4);
+    ctx.fillStyle = 'rgb(120,185,220)';
+    ctx.fillRect(x0, y0, 16, 1); ctx.fillRect(x0, y0 + 15, 16, 1);
+    ctx.fillRect(x0, y0, 1, 16); ctx.fillRect(x0 + 15, y0, 1, 16);
+  },
+  59: (ctx, x0, y0, rng) => { // ladrillo de piedra
+    paintNoise(ctx, x0, y0, rng, [118, 112, 106], 18);
+    ctx.fillStyle = 'rgb(78,74,72)';
+    for (const y of [4, 9, 14]) ctx.fillRect(x0, y0 + y, 16, 1);
+    ctx.fillRect(x0 + 7, y0, 1, 4);
+    ctx.fillRect(x0 + 3, y0 + 5, 1, 4);
+    ctx.fillRect(x0 + 11, y0 + 5, 1, 4);
+    ctx.fillRect(x0 + 7, y0 + 10, 1, 4);
+  },
   27: (ctx, x0, y0, rng) => { // bloque corazón (easter egg)
     paintNoise(ctx, x0, y0, rng, [225, 130, 160], 20);
     // corazón blanco pixelado al centro

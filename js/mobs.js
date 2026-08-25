@@ -228,12 +228,95 @@ class Spider extends Creature {
   }
 }
 
+class Creeper extends Creature {
+  constructor(scene, x, y, z, onExplodeBlock) {
+    super(scene, x, y, z, 0.34, 1.7, 4);
+    this.netType = 'creeper';
+    this.onExplodeBlock = onExplodeBlock;
+    this.fuse = 0;
+    this.buildModel();
+  }
+
+  buildModel() {
+    const green = this.mat(0x4caa45);
+    const dark = this.mat(0x1f5a24);
+    this.legL = this.box(0.22, 0.55, 0.22, green, -0.16, 0.275, 0.16);
+    this.legR = this.box(0.22, 0.55, 0.22, green, 0.16, 0.275, -0.16);
+    this.box(0.48, 0.9, 0.36, green, 0, 0.95, 0);
+    const head = this.box(0.58, 0.5, 0.5, green, 0, 1.55, 0);
+    const eyeL = new THREE.Mesh(new THREE.BoxGeometry(0.1, 0.1, 0.03), dark);
+    eyeL.position.set(-0.13, 0.06, 0.26);
+    const eyeR = eyeL.clone();
+    eyeR.position.x = 0.13;
+    const mouth = new THREE.Mesh(new THREE.BoxGeometry(0.16, 0.22, 0.03), dark);
+    mouth.position.set(0, -0.12, 0.26);
+    head.add(eyeL, eyeR, mouth);
+  }
+
+  update(dt, world, targets) {
+    if (this.dead) return;
+    this.updateFlash(dt);
+    const near = this.nearestTarget(targets);
+    if (near && near.dist < 22 && near.dist > 0.25) {
+      const { target, dist } = near;
+      const tx = target.pos.x - this.pos.x, tz = target.pos.z - this.pos.z;
+      this.group.rotation.y = Math.atan2(tx, tz);
+      const speed = dist < 3 ? 1.15 : 1.8;
+      this.vel.x = (tx / dist) * speed;
+      this.vel.z = (tz / dist) * speed;
+      this.walkPhase += dt * 8;
+      if (dist < 2.4 && Math.abs(target.pos.y - this.pos.y) < 2.2) {
+        this.fuse += dt;
+        this.setEmissive(Math.floor(this.fuse * 10) % 2 ? 0xffffff : 0x335533);
+        if (this.fuse >= 1.6) this.explode(world, targets);
+      } else {
+        this.fuse = Math.max(0, this.fuse - dt * 0.7);
+        if (this.fuse === 0 && this.flashTimer <= 0) this.setEmissive(0x000000);
+      }
+    } else {
+      this.vel.x = 0;
+      this.vel.z = 0;
+      this.fuse = Math.max(0, this.fuse - dt);
+    }
+    if (this.hitWall && this.onGround) this.vel.y = CFG.JUMP_SPEED * 0.8;
+    this.physics(dt, world);
+    const swing = Math.sin(this.walkPhase) * 0.45;
+    this.legL.rotation.x = swing;
+    this.legR.rotation.x = -swing;
+    if (this.pos.y < -30) this.die();
+  }
+
+  explode(world, targets) {
+    if (this.dead) return;
+    const center = this.pos.clone();
+    const radius = 2.4;
+    for (const target of targets) {
+      const d = target.pos.distanceTo(center);
+      if (d < radius + 1.2) target.damage(Math.max(1, Math.ceil(4 - d)));
+    }
+    const cx = Math.floor(center.x), cy = Math.floor(center.y), cz = Math.floor(center.z);
+    for (let x = cx - 2; x <= cx + 2; x++) {
+      for (let y = cy - 1; y <= cy + 2; y++) {
+        for (let z = cz - 2; z <= cz + 2; z++) {
+          if (y <= 0 || y >= CFG.HEIGHT) continue;
+          if (Math.hypot(x + 0.5 - center.x, y + 0.5 - center.y, z + 0.5 - center.z) > radius) continue;
+          const id = world.getBlock(x, y, z);
+          if (!id || id === 17 || id === 8 || id === 12 || id === 13) continue;
+          world.setBlock(x, y, z, 0);
+          if (this.onExplodeBlock) this.onExplodeBlock(x, y, z, 0);
+        }
+      }
+    }
+    this.die();
+  }
+}
+
 // Qué suelta cada enemigo al morir a manos de un jugador: [itemId, cantidad].
-const MOB_DROPS = { zombie: [118, 1], skeleton: [110, 2], spider: [111, 1] };
+const MOB_DROPS = { zombie: [118, 1], skeleton: [110, 2], spider: [111, 1], creeper: [111, 2] };
 
 class MobManager {
   // targetsFn: () => lista de jugadores atacables (local y remotos).
-  constructor(scene, world, targetsFn, onShoot, onDrop) {
+  constructor(scene, world, targetsFn, onShoot, onDrop, onBlockChange) {
     this.scene = scene;
     this.world = world;
     this.targetsFn = targetsFn;
@@ -266,9 +349,10 @@ class MobManager {
     if (this.world.getBlock(Math.floor(x), y, Math.floor(z)) === 17) return; // no en el agua
     const roll = Math.random();
     let mob;
-    if (roll < 0.5) mob = new Zombie(this.scene, x, y + 0.1, z);
-    else if (roll < 0.75) mob = new Skeleton(this.scene, x, y + 0.1, z, this.onShoot);
-    else mob = new Spider(this.scene, x, y + 0.1, z);
+    if (roll < 0.42) mob = new Zombie(this.scene, x, y + 0.1, z);
+    else if (roll < 0.66) mob = new Skeleton(this.scene, x, y + 0.1, z, this.onShoot);
+    else if (roll < 0.86) mob = new Spider(this.scene, x, y + 0.1, z);
+    else mob = new Creeper(this.scene, x, y + 0.1, z, this.onBlockChange);
     mob.onDie = () => {
       // Solo hay botín si lo mató un jugador (no al quemarse de día).
       if (mob.lastHitBy === undefined || !this.onDrop) return;

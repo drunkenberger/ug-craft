@@ -110,27 +110,111 @@ class UI {
   }
 
   // Selector de partidas guardadas de un mapa: retomar, borrar o empezar nueva.
-  showSlots(mapKey, onPick) {
+  showSlots(mapKey, onPick, onPickServer) {
     const el = document.getElementById('slots');
     const list = document.getElementById('slots-list');
     document.getElementById('slots-title').textContent = t('map_' + mapKey);
     el.classList.remove('hidden');
     document.getElementById('slotsBackBtn').onclick = () => el.classList.add('hidden');
 
-    const render = () => {
+    const online = NET.available; // solo se llama en mapas con guardado (todos multijugador)
+    const fmt = (u) => u
+      ? new Date(u).toLocaleDateString() + ' ' + new Date(u).toLocaleTimeString().slice(0, 5)
+      : '';
+    const heading = (text) => {
+      const h = document.createElement('p');
+      h.className = 'slots-heading';
+      h.textContent = text;
+      return h;
+    };
+    const api = (opts) => fetch(`/api/games?map=${mapKey}${opts && opts.id ? '&id=' + opts.id : ''}`, opts);
+
+    const render = async () => {
       list.replaceChildren();
+
+      // ---- Partidas compartidas del servidor ----
+      if (online) {
+        list.append(heading(t('sharedGames')));
+        let games = null;
+        try { games = (await (await fetch(`/api/games?map=${mapKey}`)).json()).games; } catch (e) { games = null; }
+        if (!games) {
+          const p = document.createElement('p');
+          p.className = 'slots-full';
+          p.textContent = t('serverOffline');
+          list.append(p);
+        } else {
+          for (const g of games) {
+            const row = document.createElement('div');
+            row.className = 'slot-row';
+            const main = document.createElement('button');
+            main.className = 'btn slot-btn';
+            main.textContent = `☁ ${g.name}${g.updated ? ' · ' + fmt(g.updated) : ''}`;
+            main.addEventListener('click', () => { el.classList.add('hidden'); onPickServer(g.id); });
+            const del = document.createElement('button');
+            del.className = 'btn secondary slot-del';
+            del.textContent = '🗑';
+            del.title = t('deleteSave');
+            del.addEventListener('click', async () => {
+              if (confirm(t('confirmDeleteShared'))) {
+                await api({ method: 'DELETE', id: g.id });
+                render();
+              }
+            });
+            row.append(main, del);
+            list.append(row);
+          }
+          const nuevo = document.createElement('button');
+          nuevo.className = 'btn slot-btn slot-new';
+          nuevo.textContent = t('newSharedGame');
+          nuevo.addEventListener('click', async () => {
+            const { id } = await (await api({ method: 'POST', headers: { 'Content-Type': 'application/json' }, body: '{}' })).json();
+            el.classList.add('hidden');
+            onPickServer(id);
+          });
+          list.append(nuevo);
+        }
+        list.append(heading(t('localGames')));
+      }
+
+      // ---- Partidas locales de esta máquina ----
       for (const { slot, updated } of Storage.listSlots(mapKey)) {
         const row = document.createElement('div');
         row.className = 'slot-row';
-
         const main = document.createElement('button');
         main.className = 'btn slot-btn';
-        const when = updated
-          ? new Date(updated).toLocaleDateString() + ' ' +
-            new Date(updated).toLocaleTimeString().slice(0, 5)
-          : '';
-        main.textContent = `🗺 ${t('gameSlot')} ${slot}${when ? ' · ' + when : ''}`;
+        main.textContent = `🗺 ${t('gameSlot')} ${slot}${updated ? ' · ' + fmt(updated) : ''}`;
         main.addEventListener('click', () => { el.classList.add('hidden'); onPick(slot); });
+        row.append(main);
+
+        if (online) {
+          const up = document.createElement('button');
+          up.className = 'btn secondary slot-del';
+          up.textContent = '☁';
+          up.title = t('uploadToServer');
+          up.addEventListener('click', async () => {
+            const data = Storage.loadSlot(mapKey, slot) || {};
+            // Sube también el estado del jugador (inventario, posición, vida, día) bajo su nombre.
+            const pl = data.player || {};
+            const players = {};
+            const myName = Storage.playerName();
+            if (myName) {
+              players[myName] = {
+                pos: pl.x !== undefined ? { x: pl.x, y: pl.y, z: pl.z } : undefined,
+                health: pl.health,
+                hunger: pl.hunger,
+                day: data.day,
+                inventory: data.inventory || [],
+              };
+            }
+            await api({
+              method: 'POST', headers: { 'Content-Type': 'application/json' },
+              body: JSON.stringify({ edits: data.edits || {}, time: data.time ?? null, players }),
+            });
+            this.toast(t('uploaded'));
+            render();
+          });
+          row.append(up);
+        }
 
         const del = document.createElement('button');
         del.className = 'btn secondary slot-del';
@@ -139,10 +223,10 @@ class UI {
         del.addEventListener('click', () => {
           if (confirm(t('confirmDelete'))) { Storage.clearSlot(mapKey, slot); render(); }
         });
-
-        row.append(main, del);
+        row.append(del);
         list.append(row);
       }
+
       const free = Storage.freeSlot(mapKey);
       if (free) {
         const nuevo = document.createElement('button');
@@ -150,7 +234,7 @@ class UI {
         nuevo.textContent = `➕ ${t('newGame')}`;
         nuevo.addEventListener('click', () => { el.classList.add('hidden'); onPick(free); });
         list.append(nuevo);
-      } else {
+      } else if (!online) {
         const full = document.createElement('p');
         full.className = 'slots-full';
         full.textContent = t('slotsFull');
