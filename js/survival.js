@@ -9,9 +9,11 @@ function saplingEntry(x, y, z) {
 function scanWorldExtras(game) {
   game.torches = new Set();
   game.saplings = [];
+  game.tntFuses = new Map();
   for (const [k, id] of Object.entries(game.world.edits)) {
     const [x, y, z] = k.split(',').map(Number);
-    if (id === 19) game.torches.add(k);
+    if (BLOCKS[id] && BLOCKS[id].light) game.torches.add(k);
+    if (id === 40) game.tntFuses.set(k, 4);
     if (id === 22) game.saplings.push(saplingEntry(x, y, z));
   }
 }
@@ -19,7 +21,11 @@ function scanWorldExtras(game) {
 // Registrar cambios de bloque que nos importan (propios o llegados por red).
 function trackBlockChange(game, x, y, z, id) {
   const k = `${x},${y},${z}`;
-  if (id === 19) game.torches.add(k);
+  game.adventure?.cropTimers.delete(k);
+  if (id === 0 && game.tntFuses.has(k)) game.adventure?.fx.burst(x,y,z);
+  if (id === 40) game.tntFuses.set(k, 4);
+  else game.tntFuses.delete(k);
+  if (BLOCKS[id] && BLOCKS[id].light) game.torches.add(k);
   else game.torches.delete(k);
   game.saplings = game.saplings.filter((s) => s.x !== x || s.y !== y || s.z !== z);
   if (id === 22) game.saplings.push(saplingEntry(x, y, z));
@@ -42,7 +48,15 @@ function updateTorchLights(game, dt) {
   game.torchTimer = 0.4;
   const p = game.player.pos;
   const near = [];
-  for (const k of game.torches) {
+  const lights = new Set(game.torches);
+  // Incluir faroles de aldeas generadas, que no son ediciones del jugador.
+  for (let x=Math.floor(p.x)-8;x<=Math.floor(p.x)+8;x++)
+    for (let z=Math.floor(p.z)-8;z<=Math.floor(p.z)+8;z++)
+      for (let y=Math.max(1,Math.floor(p.y)-4);y<=Math.min(CFG.HEIGHT-1,Math.floor(p.y)+4);y++) {
+        const def=BLOCKS[game.world.getBlock(x,y,z)];
+        if (def && def.light) lights.add(`${x},${y},${z}`);
+      }
+  for (const k of lights) {
     const [x, y, z] = k.split(',').map(Number);
     const d = Math.hypot(x + 0.5 - p.x, y - p.y, z + 0.5 - p.z);
     if (d < 26) near.push({ x, y, z, d });
@@ -91,5 +105,51 @@ function growTreeAt(game, x, y, z) {
         put(x + dx, top + dy, z + dz, 6);
       }
     }
+  }
+}
+
+// La TNT encendida es un bloque persistible; solo el anfitrión simula la mecha.
+function lightTnt(game, pos) {
+  const {x,y,z}=pos;
+  if (game.world.getBlock(x,y,z)!==33) return;
+  changeExplosiveBlock(game,x,y,z,40);
+  game.ui.toast(t('tntLit'),4000);
+}
+function changeExplosiveBlock(game,x,y,z,id) {
+  game.world.setBlock(x,y,z,id);
+  trackBlockChange(game,x,y,z,id);
+  if (game.net) NET.send({t:'block',x,y,z,id});
+}
+function updateTnt(game,dt) {
+  if (game.net && !NET.isHost) return;
+  // Copia: las explosiones en cadena quedan para la siguiente actualización.
+  for (const [key,time] of [...game.tntFuses]) {
+    const [x,y,z]=key.split(',').map(Number);
+    game.world.ensureChunkData(Math.floor(x/CFG.CHUNK),Math.floor(z/CFG.CHUNK));
+    if (game.world.getBlock(x,y,z)!==40) { game.tntFuses.delete(key); continue; }
+    if (time>dt) { game.tntFuses.set(key,time-dt); continue; }
+    game.tntFuses.delete(key);
+    explodeTnt(game,x,y,z);
+  }
+}
+function explodeTnt(game,x,y,z) {
+  game.adventure?.fx.burst(x,y,z);
+  const w=game.world;
+  w.batchEdit(() => {
+    changeExplosiveBlock(game,x,y,z,0);
+    if(game.worldRules?.terrainDamage !== false) for (let dx=-3;dx<=3;dx++) for (let dy=-3;dy<=3;dy++) for (let dz=-3;dz<=3;dz++) {
+      if (dx*dx+dy*dy+dz*dz>9 || y+dy<=0 || y+dy>=CFG.HEIGHT) continue;
+      const bx=x+dx,by=y+dy,bz=z+dz;
+      w.ensureChunkData(Math.floor(bx/CFG.CHUNK),Math.floor(bz/CFG.CHUNK));
+      const id=w.getBlock(bx,by,bz);
+      // Conservar cofres, regalos, agua y obsidiana.
+      if (!id || BLOCKS[id]?.unbreakable || [11,12,13,17,34,40].includes(id)) continue;
+      changeExplosiveBlock(game,bx,by,bz,id===33 ? 40 : 0);
+      if (id===33) game.tntFuses.set(`${bx},${by},${bz}`, .6);
+    }
+  });
+  // El cráter se sincroniza por bloques; daño a criaturas simulado por el host.
+  for (const c of game.hittableCreatures()) {
+    if (!c.dead && Math.hypot(c.pos.x-x-.5,c.pos.y-y,c.pos.z-z-.5)<4) c.hurt(4);
   }
 }

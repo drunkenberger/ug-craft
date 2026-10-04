@@ -7,17 +7,20 @@ const GameLifecycle = {
       return;
     }
     if (!this.ownAvatar) {
-      this.ownAvatar = new Humanoid(this.scene, 0, 0, 0, Character.appearance());
+      this.ownAvatar = new Humanoid(this.scene, 0, 0, 0, this.armor.appearance());
       this.lastOwnPos.copy(this.player.pos);
     }
     const g = this.ownAvatar.group;
     g.visible = true;
     g.position.copy(this.player.pos);
+    if(this.expedition.travel.mode==='horse')g.position.y+=.5;
+    if(this.expedition.travel.mode==='boat')g.position.y-=.3;
     g.rotation.y = this.controls.yaw + Math.PI;
-    if (this.player.sitting !== this.ownAvatar.sitting) {
-      this.ownAvatar.setSitting(this.player.sitting);
+    const seated=this.player.sitting||!!this.expedition.travel.mode;
+    if (seated !== this.ownAvatar.sitting) {
+      this.ownAvatar.setSitting(seated);
     }
-    if (this.player.sitting) { this.lastOwnPos.copy(this.player.pos); return; }
+    if (seated) { this.lastOwnPos.copy(this.player.pos); return; }
     const speed = this.player.pos.distanceTo(this.lastOwnPos) / Math.max(dt, 0.001);
     this.lastOwnPos.copy(this.player.pos);
     if (speed > 0.8) {
@@ -35,6 +38,7 @@ const GameLifecycle = {
     if (this.mobs) this.mobs.clear();
     this.player.respawn(this.respawnPoint || this.spawn);
     this.renderHearts();
+    this.save();
   },
 
   update(dt) {
@@ -70,9 +74,12 @@ const GameLifecycle = {
       }
       // La dificultad sube con los días: cada amanecer permite un mob más.
       const mobCap = this.map.hunger ? Math.min(2 + this.state.day, 10) : CFG.MAX_ZOMBIES;
-      if (this.mobs) this.mobs.update(dt, this.daynight.isNight(), mobCap);
+      if (this.mobs) {
+        this.mobs.allowTerrainDamage=this.worldRules.terrainDamage;
+        this.mobs.update(dt,this.daynight.isNight(),this.worldRules.peaceful ? 0 : mobCap);
+      }
       if (this.animals) this.animals.update(dt, this.daynight.isNight());
-      if (this.map.canBuild) updateSaplings(this, dt);
+      if (this.map.canBuild) { updateSaplings(this, dt); updateTnt(this, dt); this.adventure.update(dt); }
       this.updateBolts(dt);
     } else {
       this.daynight.update(0, this.player.pos);
@@ -118,6 +125,7 @@ const GameLifecycle = {
       this.camera.rotateX(this.controls.pitch);
     }
 
+    this.expedition.updatePreview(active);
     this.highlight.visible = false;
     if (active && this.map.canBuild) {
       const target = this.targetBlock();
@@ -155,12 +163,10 @@ const GameLifecycle = {
       respawn: this.respawnPoint,
       inventory: this.inventory.serialize(),
       chests: this.chests,
-      // Perros adoptados por este jugador (si somos invitados, conservar los guardados).
-      pets: this.animals
-        ? this.animals.animals
-            .filter((a) => a.tamed && a.owner === 'local' && !a.dead)
-            .map((a) => [a.pos.x, a.pos.y, a.pos.z])
-        : this.savedPets || [],
+      adventure: this.adventure.serialize(),
+      worldRules: this.worldRules,
+      // Especie, nombre y posición de los compañeros de este jugador.
+      pets: serializePets(this),
       updated: Date.now(),
     });
     this.world.dirty = false;
@@ -187,6 +193,8 @@ const GameLifecycle = {
 
   stop() {
     this.save();
+    this.expedition.dispose();
+    this.adventure.dispose();
     this.daynight.sky.dispose();
     if (this.ownAvatar) this.ownAvatar.die();
     if (this.minimap) this.minimap.dispose();
@@ -224,5 +232,9 @@ const GameLifecycle = {
     this.controls.onSlotChange = null;
     this.controls.onOpenCraft = null;
     this.controls.onFireKey = null;
+    this.controls.onAdventure = null;
+    this.controls.onCallPets = null;
+    this.controls.onRotate = null;
+    this.controls.onDismount = null;
   }
 };

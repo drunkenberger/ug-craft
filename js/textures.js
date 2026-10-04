@@ -555,6 +555,23 @@ function paintIconTiles(ctx) {
   }
 }
 
+// Nuevos materiales con texturas propias y bandas legibles para la TNT.
+for (const [tile, color] of [[62,[39,25,58]], [63,[230,223,210]], [64,[175,85,57]],
+  [65,[185,111,68]], [66,[100,121,78]], [67,[58,61,68]]]) {
+  TILE_PAINTERS[tile] = (ctx,x,y,rng) => {
+    paintNoise(ctx,x,y,rng,color,28);
+    ctx.fillStyle = shade(color,-28);
+    for (const row of [0,8]) ctx.fillRect(x,y+row,16,1);
+    ctx.fillRect(x+8,y,1,8); ctx.fillRect(x+3,y+8,1,8);
+  };
+}
+for (const tile of [60,61,68]) TILE_PAINTERS[tile] = (ctx,x,y,rng) => {
+  paintNoise(ctx,x,y,rng,tile === 68 ? [245,145,50] : [190,43,35],24);
+  ctx.fillStyle = '#fff0cf'; ctx.fillRect(x,y+5,16,7);
+  ctx.fillStyle = '#29252b'; ctx.font = 'bold 7px monospace';
+  ctx.fillText(tile === 61 ? '+' : 'TNT',x+1,y+11);
+};
+
 // Devuelve { texture, canvas } con todas las texturas dibujadas.
 function createAtlas() {
   const size = ATLAS.TILE * ATLAS.COLS;
@@ -578,4 +595,86 @@ function createAtlas() {
   texture.minFilter = THREE.NearestFilter;
   texture.generateMipmaps = false;
   return { texture, canvas };
+}
+
+TILE_PAINTERS[69]=(ctx,x,y,rng)=> {
+  paintNoise(ctx,x,y,rng,[92,58,34],20);
+  ctx.fillStyle='#352a22'; for(let i=2;i<16;i+=4) ctx.fillRect(x,y+i,16,1);
+};
+for(const tile of [70,71,72,73]) TILE_PAINTERS[tile]=(ctx,x,y)=> {
+  ctx.clearRect(x,y,16,16); const ripe=tile===71 || tile===73;
+  ctx.fillStyle=tile<=71 ? (ripe ? '#dcae3b' : '#6cb449') : '#4d9e3b';
+  for(const a of [3,7,11]) {
+    ctx.fillRect(x+a,y+(ripe ? 3 : 9),2,ripe ? 13 : 7);
+    ctx.fillRect(x+a-2,y+(ripe ? 5 : 10),6,2);
+  }
+  if(tile===73) {ctx.fillStyle='#ed812f';ctx.fillRect(x+5,y+11,6,4);}
+};
+TILE_PAINTERS[74]=(ctx,x,y,rng)=> {
+  paintNoise(ctx,x,y,rng,[140,94,47],20);ctx.fillStyle='#54391e';
+  ctx.strokeStyle='#54391e';ctx.strokeRect(x+1,y+1,14,14);
+  ctx.fillRect(x+3,y+3,4,6);ctx.fillRect(x+9,y+3,4,6);
+  ctx.fillStyle='#ffd166';ctx.fillRect(x+12,y+11,2,2);
+};
+TILE_PAINTERS[75]=(ctx,x,y,rng)=> {
+  paintNoise(ctx,x,y,rng,[93,41,161],30);ctx.strokeStyle='#d8b5ff';
+  for(let i=1;i<7;i+=2) ctx.strokeRect(x+i,y+i,16-i*2,16-i*2);
+};
+TILE_PAINTERS[76]=(ctx,x,y,rng)=> {
+  paintNoise(ctx,x,y,rng,[173,49,95],20);ctx.fillStyle='#fff0dc';
+  for(const [a,b] of [[2,3],[10,2],[6,10],[12,12]]) ctx.fillRect(x+a,y+b,3,3);
+};
+TILE_PAINTERS[77]=(ctx,x,y,rng)=> {
+  paintNoise(ctx,x,y,rng,[214,198,174],18);ctx.fillStyle='#ad9e8e';
+  for(const a of [3,8,13]) ctx.fillRect(x+a,y,1,16);
+};
+TILE_PAINTERS[78]=(ctx,x,y,rng)=> {
+  paintNoise(ctx,x,y,rng,[125,215,202],35);ctx.fillStyle='#e8fff2';
+  ctx.fillRect(x+3,y+3,5,5);ctx.fillRect(x+10,y+9,4,4);
+};
+for(const [tile,base] of [[79,70],[80,73],[81,71]]) TILE_PAINTERS[tile]=TILE_PAINTERS[base];
+TILE_PAINTERS[82]=(ctx,x,y)=> {
+  ctx.clearRect(x,y,16,16);ctx.fillStyle='#b87632';ctx.fillRect(x+2,y+5,12,7);
+  ctx.fillStyle='#ebc06b';ctx.fillRect(x+3,y+4,10,6);
+  ctx.fillStyle='#965523';for(const a of [5,9])ctx.fillRect(x+a,y+5,1,4);
+};
+TILE_PAINTERS[83]=(ctx,x,y)=> {
+  ctx.clearRect(x,y,16,16);ctx.fillStyle='#ad8250';ctx.fillRect(x+8,y+4,2,11);
+  ctx.fillStyle='#cad2d8';ctx.fillRect(x+2,y+2,10,3);ctx.fillRect(x+2,y+4,3,3);
+};
+TILE_PAINTERS[84]=(ctx,x,y)=> {
+  ctx.clearRect(x,y,16,16);ctx.fillStyle='#dfbc58';ctx.fillRect(x+2,y+6,9,7);ctx.fillRect(x+9,y+6,6,3);
+  ctx.fillStyle='#352b21';ctx.fillRect(x+5,y+8,3,3);
+};
+TILE_PAINTERS[85]=(ctx,x,y)=> {
+  ctx.clearRect(x,y,16,16);ctx.fillStyle='#306697';ctx.fillRect(x+1,y+1,14,14);
+  ctx.strokeStyle='#e0f2ff';ctx.strokeRect(x+4,y+6,8,6);ctx.beginPath();ctx.moveTo(x+3,y+6);ctx.lineTo(x+8,y+2);ctx.lineTo(x+13,y+6);ctx.stroke();
+};
+
+for(const [tile,color,label] of [[86,[114,82,194],'◆'],[87,[213,161,42],'☀'],[88,[88,116,173],'☾'],[89,[71,135,75],'♣'],[90,[66,161,114],'✓'],[91,[87,76,68],'#'],[92,[181,132,45],'★'],[93,[232,186,62],'E'],[94,[124,92,145],'?']]) {
+  TILE_PAINTERS[tile]=(ctx,x,y,rng)=>{
+    paintNoise(ctx,x,y,rng,color,20);ctx.strokeStyle=shade(color,55);ctx.strokeRect(x+1,y+1,14,14);
+    ctx.fillStyle='#fff5d5';ctx.font='bold 12px sans-serif';ctx.textAlign='center';ctx.fillText(label,x+8,y+12);ctx.textAlign='start';
+  };
+}
+TILE_PAINTERS[95]=(ctx,x,y)=>{
+  ctx.clearRect(x,y,16,16);ctx.fillStyle='#87572f';ctx.fillRect(x+1,y+7,14,5);ctx.fillRect(x+3,y+12,10,2);
+  ctx.fillStyle='#d4aa69';ctx.fillRect(x+3,y+8,10,2);
+};
+TILE_PAINTERS[96]=(ctx,x,y)=>{
+  ctx.clearRect(x,y,16,16);ctx.fillStyle='#995532';ctx.fillRect(x+2,y+4,12,7);ctx.fillRect(x+3,y+9,3,5);ctx.fillRect(x+10,y+9,3,5);
+  ctx.fillStyle='#e1bd65';ctx.fillRect(x+3,y+4,10,2);
+};
+
+// Iconos de las armaduras: casco, pechera, pantalones y botas.
+for(let tier=0;tier<3;tier++)for(let slot=0;slot<4;slot++) {
+  TILE_PAINTERS[97+tier*4+slot]=(ctx,x,y)=>{
+    ctx.clearRect(x,y,16,16);ctx.fillStyle=['#c5d2dc','#f0bf42','#42dccc'][tier];
+    const rect=(a,b,w,h)=>ctx.fillRect(x+a,y+b,w,h);
+    if(slot===0){rect(3,3,10,4);rect(2,6,3,6);rect(11,6,3,6);}
+    if(slot===1){rect(4,4,8,10);rect(1,3,4,5);rect(11,3,4,5);}
+    if(slot===2){rect(3,2,10,4);rect(3,6,4,8);rect(9,6,4,8);}
+    if(slot===3){rect(2,4,4,9);rect(9,4,4,9);rect(2,11,5,3);rect(9,11,5,3);}
+    ctx.fillStyle='#ffffff';rect(4,4,2,2);
+  };
 }

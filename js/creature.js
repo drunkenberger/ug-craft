@@ -18,6 +18,7 @@ class Creature {
     this.walkPhase = Math.random() * Math.PI * 2;
     this.materials = [];
     this.group = new THREE.Group();
+    this.group.position.copy(this.pos);
     scene.add(this.group);
   }
 
@@ -35,7 +36,7 @@ class Creature {
   }
 
   setEmissive(hex) {
-    this.materials.forEach((m) => m.emissive.setHex(hex));
+    this.materials.forEach((m) => {if(m.emissive)m.emissive.setHex(hex);});
   }
 
   physics(dt, world) {

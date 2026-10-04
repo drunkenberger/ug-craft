@@ -54,8 +54,54 @@ const BLOCKS = {
   29: { key: 'lantern',     top: 55, bottom: 55, side: 55, light: true },
   30: { key: 'vase',        top: 56, bottom: 56, side: 57, solid: false },
   31: { key: 'glass',       top: 58, bottom: 58, side: 58, solid: false },
+  33: { key: 'tnt', top: 61, bottom: 61, side: 60 },
+  34: { key: 'obsidian', top: 62, bottom: 62, side: 62, needTier: 3 },
+  35: { key: 'quartz', top: 63, bottom: 63, side: 63 },
+  36: { key: 'terracotta', top: 64, bottom: 64, side: 64 },
+  37: { key: 'copper', top: 65, bottom: 65, side: 65 },
+  38: { key: 'mossbrick', top: 66, bottom: 66, side: 66 },
+  39: { key: 'basalt', top: 67, bottom: 67, side: 67 },
+  41: { key: 'farmland', top: 69, bottom: 2, side: 2 },
+  42: { key: 'wheatSprout', top: 70, bottom: 70, side: 70, solid: false, cross: true },
+  43: { key: 'wheatCrop', top: 71, bottom: 71, side: 71, solid: false, cross: true },
+  44: { key: 'carrotSprout', top: 72, bottom: 72, side: 72, solid: false, cross: true },
+  45: { key: 'carrotCrop', top: 73, bottom: 73, side: 73, solid: false, cross: true },
+  46: { key: 'door', top: 8, bottom: 8, side: 74, shape: 'door' },
+  47: { key: 'openDoor', top: 8, bottom: 8, side: 74, solid: false, shape: 'openDoor' },
+  48: { key: 'slab', top: 8, bottom: 8, side: 8, shape: 'slab' },
+  49: { key: 'stairs', top: 59, bottom: 32, side: 59, shape: 'stairs' },
+  50: { key: 'portal', top: 75, bottom: 75, side: 75, solid: false, cross: true, light: true },
+  51: { key: 'mushroomCap', top: 76, bottom: 63, side: 76 },
+  52: { key: 'mushroomStem', top: 63, bottom: 63, side: 77 },
+  54: { key:'crystal', top:86,bottom:86,side:86,light:true,needTier:1 },
+  55: { key:'runeSun', top:87,bottom:87,side:87,light:true,unbreakable:true },
+  56: { key:'runeMoon', top:88,bottom:88,side:88,light:true,unbreakable:true },
+  57: { key:'runeLeaf', top:89,bottom:89,side:89,light:true,unbreakable:true },
+  58: { key:'runeSolved', top:90,bottom:90,side:90,light:true,unbreakable:true },
+  59: { key:'castleGate', top:91,bottom:91,side:91,unbreakable:true },
+  60: { key:'royalChest', top:92,bottom:92,side:92,unbreakable:true },
+  61: { key:'trophy', top:93,bottom:93,side:93,light:true },
+  62: { key:'caveCache', top:94,bottom:94,side:94,unbreakable:true },
+  63: { key:'stairs', top:59,bottom:59,side:59,shape:'stairs',rotation:1 },
+  64: { key:'stairs', top:59,bottom:59,side:59,shape:'stairs',rotation:2 },
+  65: { key:'stairs', top:59,bottom:59,side:59,shape:'stairs',rotation:3 },
+  53: { key: 'glowstone', top: 78, bottom: 78, side: 78, light: true },
+  40: { key: 'litTnt', top: 61, bottom: 61, side: 68, light: true },
   32: { key: 'brick',       top: 59, bottom: 59, side: 59 },
 };
 
 // Bloques disponibles en la barra rápida por defecto (teclas 1-7).
 const HOTBAR = [1, 2, 3, 4, 5, 6, 7];
+
+// Cajas locales compartidas por dibujo y colisiones: [minX,minY,minZ,maxX,maxY,maxZ].
+function blockBoxes(id) {
+  const shape = BLOCKS[id] && BLOCKS[id].shape;
+  if (shape === 'slab') return [[0,0,0,1,.5,1]];
+  if (shape === 'stairs') {
+    const upper=[[0,.5,.5,1,1,1],[0,.5,0,.5,1,1],[0,.5,0,1,1,.5],[.5,.5,0,1,1,1]][BLOCKS[id].rotation||0];
+    return [[0,0,0,1,.5,1],upper];
+  }
+  if (shape === 'door') return [[0,0,0,1,1,.16]];
+  if (shape === 'openDoor') return [[0,0,0,.16,1,1]];
+  return [[0,0,0,1,1,1]];
+}

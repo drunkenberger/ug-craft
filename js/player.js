@@ -38,7 +38,7 @@ class Player {
   }
 
   eyePosition() {
-    return new THREE.Vector3(this.pos.x, this.pos.y + CFG.EYE_HEIGHT, this.pos.z);
+    return new THREE.Vector3(this.pos.x, this.pos.y + CFG.EYE_HEIGHT + (this.rules.eyeLift||0), this.pos.z);
   }
 
   update(dt, controls) {
@@ -74,7 +74,7 @@ class Player {
     } else {
       const move = controls.getMoveVector();
       const sin = Math.sin(controls.yaw), cos = Math.cos(controls.yaw);
-      const speed = CFG.PLAYER_SPEED * (this.inWater ? 0.55 : 1);
+      const speed = CFG.PLAYER_SPEED * (this.rules.moveScale||1) * (this.rules.boating ? (this.inWater?1:.15) : this.inWater ? .55 : 1);
       this.vel.x = (move.x * cos + move.z * sin) * speed;
       this.vel.z = (move.z * cos - move.x * sin) * speed;
     }
@@ -86,18 +86,22 @@ class Player {
       this.boost.t -= dt;
     }
 
-    if (!this.rules.driving && controls.keys.has('Space')) {
+    if (!this.rules.driving && !this.rules.boating && controls.keys.has('Space')) {
       if (this.inWater) this.vel.y = 3.4; // nadar hacia arriba
-      else if (this.onGround) this.vel.y = CFG.JUMP_SPEED;
+      else if (this.onGround) this.vel.y = CFG.JUMP_SPEED*(this.rules.jumpScale||1);
     }
     this.vel.y += CFG.GRAVITY * (this.inWater ? 0.3 : 1) * dt;
     this.vel.y = Math.max(this.vel.y, this.inWater ? -3 : -50);
 
+    if(this.rules.boating && this.inWater) {
+      let waterY=Math.floor(this.pos.y);while(waterY<CFG.HEIGHT && this.world.getBlock(bx,waterY,bz)===17)waterY++;
+      this.vel.y=Math.max(-4,Math.min(4,(waterY-.25-this.pos.y)*8));
+    }
     const prevVy = this.vel.y;
     moveBody(this.world, this, dt);
 
     if (this.rules.fallDamage && this.onGround && prevVy < -13 && !this.inWater) {
-      this.damage(1 + Math.floor((-prevVy - 13) / 4));
+      this.damage(1 + Math.floor((-prevVy - 13) / 4),false,'fall');
     }
     if (this.pos.y < -20) {
       if (this.rules.onVoidFall) this.rules.onVoidFall();
@@ -123,7 +127,7 @@ class Player {
         this.starveTimer += dt;
         if (this.starveTimer > 8) {
           this.starveTimer = 0;
-          if (this.health > 3) this.damage(1);
+          if (this.health > 3) this.damage(1,false,'hunger');
         }
       }
     }
@@ -162,8 +166,9 @@ class Player {
     this.vel.z = -Math.cos(controls.yaw) * this.kartSpeed;
   }
 
-  damage(n, ignoreInvuln = false) {
+  damage(n, ignoreInvuln = false, kind = 'combat') {
     if (this.dead || (this.invulnTimer > 0 && !ignoreInvuln)) return;
+    if(kind==='combat'&&!ignoreInvuln)n*=1-Math.min(.8,Math.max(0,this.rules.armorProtection?.()||0));
     this.health = Math.max(0, this.health - n);
     this.invulnTimer = 0.6;
     this.regenTimer = 0;

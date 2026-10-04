@@ -6,6 +6,7 @@ const fs = require('fs');
 const path = require('path');
 const crypto = require('crypto');
 const os = require('os');
+const auth = require('./auth');
 
 const PORT = Number(process.env.PORT) || 8940;
 const ROOT = __dirname;
@@ -15,7 +16,7 @@ const ROOT = __dirname;
 // se pueden empezar en una máquina y seguir en otra sin perder mundo ni estado.
 // La sala se llama "<mapa>#<id>"; el mundo (edits) es compartido y el estado de
 // cada jugador (posición, inventario, vida, hambre) se guarda por nombre.
-const WORLDS_DIR = path.join(ROOT, 'worlds');
+const WORLDS_DIR = path.join(process.env.EUGECRAFT_DATA_DIR || ROOT, 'worlds');
 const PERSIST_MAPS = new Set(['survival', 'creative']);
 try { fs.mkdirSync(WORLDS_DIR, { recursive: true }); } catch (e) { /* ya existe */ }
 
@@ -29,7 +30,7 @@ function loadRoomFromDisk(name) {
   try {
     const d = JSON.parse(fs.readFileSync(worldFile(baseMap(name), partId(name)), 'utf8'));
     return {
-      name: d.name || '', edits: d.edits || {}, time: d.time ?? null,
+      name: d.name || '', edits: d.edits || {}, time: d.time ?? null, rules:d.rules || {},
       players: d.players || {}, updated: d.updated || 0,
     };
   } catch (e) {
@@ -49,7 +50,7 @@ function flushRoom(name) {
   if (!r || !isPersistent(name)) return;
   try {
     fs.writeFileSync(worldFile(baseMap(name), partId(name)), JSON.stringify({
-      name: r.name || '', edits: r.edits, time: r.time, players: r.players || {}, updated: Date.now(),
+      name: r.name || '', edits: r.edits, time: r.time, rules:r.rules || {}, players: r.players || {}, updated: Date.now(),
     }));
   } catch (e) {
     console.log(`[!] No se pudo guardar la partida "${name}": ${e.message}`);
@@ -75,12 +76,13 @@ function listGames(map) {
 }
 
 // Crea una partida nueva (opcionalmente sembrada con un mundo local subido).
-function createGame(map, name, edits, time, players) {
+function createGame(map, name, edits, time, players, rules={}) {
   const id = Date.now().toString(36) + crypto.randomBytes(2).toString('hex');
   const roomName = `${map}#${id}`;
   rooms.set(roomName, {
     clients: new Map(), hostId: null,
     name: name || '', edits: edits || {}, time: time ?? null, players: players || {},
+    rules: {peaceful:rules.peaceful===true,terrainDamage:rules.terrainDamage!==false},
   });
   flushRoom(roomName);
   return { id, name: name || '' };
@@ -91,6 +93,8 @@ function deleteGame(map, id) {
   rooms.delete(roomName);
   try { fs.unlinkSync(worldFile(map, id)); return true; } catch (e) { return false; }
 }
+// Solo estos archivos se sirven por HTTP (nunca users.json, .secret, worlds/, server.js...).
+const PUBLIC_DIRS = new Set(['js', 'css', 'lib']);
 const MIME = {
   '.html': 'text/html; charset=utf-8',
   '.js': 'text/javascript; charset=utf-8',
@@ -109,8 +113,21 @@ function sendJSON(res, code, obj) {
 const server = http.createServer((req, res) => {
   const url = new URL(req.url, 'http://x');
 
+  if (url.pathname === '/api/login' && req.method === 'POST') {
+    let body = '';
+    req.on('data', (c) => { body += c; if (body.length > 1e4) req.destroy(); });
+    req.on('end', () => {
+      let d = {};
+      try { d = JSON.parse(body || '{}'); } catch (e) { /* queda vacío */ }
+      const r = auth.login(d.user, d.password);
+      sendJSON(res, r.error ? (r.error === 'locked' ? 429 : 401) : 200, r);
+    });
+    return;
+  }
+
   // API de partidas compartidas (solo mapas persistentes).
   if (url.pathname === '/api/games') {
+    if (!auth.fromRequest(req)) { sendJSON(res, 401, { error: 'no autorizado' }); return; }
     const map = safe(url.searchParams.get('map') || '');
     if (!PERSIST_MAPS.has(map)) { sendJSON(res, 400, { error: 'mapa inválido' }); return; }
 
@@ -124,7 +141,7 @@ const server = http.createServer((req, res) => {
         try { d = JSON.parse(body || '{}'); } catch (e) { sendJSON(res, 400, { error: 'json inválido' }); return; }
         const existing = listGames(map).length;
         const name = (d.name && String(d.name).slice(0, 40)) || `Partida ${existing + 1}`;
-        sendJSON(res, 200, createGame(map, name, d.edits || {}, d.time ?? null, d.players || {}));
+        sendJSON(res, 200, createGame(map, name, d.edits || {}, d.time ?? null, d.players || {}, d.rules || {}));
       });
       return;
     }
@@ -141,7 +158,8 @@ const server = http.createServer((req, res) => {
   let file = decodeURIComponent(url.pathname);
   if (file === '/') file = '/index.html';
   const full = path.join(ROOT, path.normalize(file));
-  if (!full.startsWith(ROOT)) { res.writeHead(403); res.end(); return; }
+  const rel = path.relative(ROOT, full).split(path.sep);
+  if (rel[0].startsWith('..') || !(rel[0] === 'index.html' || PUBLIC_DIRS.has(rel[0]))) { res.writeHead(403); res.end(); return; }
   fs.readFile(full, (err, data) => {
     if (err) { res.writeHead(404); res.end('No encontrado'); return; }
     res.writeHead(200, {
@@ -213,6 +231,7 @@ function room(name) {
       name: disk ? disk.name : '',
       edits: disk ? disk.edits : {},
       time: disk ? disk.time : null,
+      rules: disk ? disk.rules || {} : {},
       players: disk ? disk.players : {},
     });
   }
@@ -233,15 +252,17 @@ function handleMessage(sock, state, msg) {
   const r = state.room ? rooms.get(state.room) : null;
 
   if (msg.t === 'join') {
+    const user = auth.verifyToken(msg.token);
+    if (!user) { sendTo(sock, { t: 'unauthorized' }); sock.end(); return; }
     state.room = String(msg.room || 'mundo');
-    state.player = safe(msg.player || '').toLowerCase() || null; // identidad para el estado guardado
+    state.player = user.id; // identidad verificada para el estado guardado
     const rm = room(state.room);
     rm.clients.set(state.id, sock);
     if (rm.hostId === null) rm.hostId = state.id;
     sendTo(sock, {
       t: 'welcome', id: state.id, host: rm.hostId === state.id,
       peers: [...rm.clients.keys()].filter((i) => i !== state.id),
-      edits: rm.edits, time: rm.time,
+      edits: rm.edits, time: rm.time, rules:rm.rules || {},
       pstate: state.player ? (rm.players[state.player] || null) : null, // estado guardado de este jugador
     });
     broadcast(rm, { t: 'peer-join', id: state.id }, state.id);
@@ -265,6 +286,10 @@ function handleMessage(sock, state, msg) {
       scheduleSave(state.room);
       broadcast(r, msg, state.id);
       break;
+    case 'rules':
+      if(r.hostId!==state.id) break;
+      r.rules={peaceful:msg.rules?.peaceful===true,terrainDamage:msg.rules?.terrainDamage!==false};
+      scheduleSave(state.room);broadcast(r,{t:'rules',rules:r.rules},state.id);break;
     case 'time':
       r.time = msg.v;
       scheduleSave(state.room);
@@ -288,6 +313,8 @@ function handleMessage(sock, state, msg) {
       if (target) sendTo(target, msg);
       break;
     }
+    case 'petaction':
+    case 'petrestore':
     case 'hit':    // golpe a un mob: solo lo procesa el anfitrión
     case 'tame':   // adopción de un perro: la aplica el anfitrión
     case 'kick':   // patada al balón (fútbol)
@@ -379,6 +406,7 @@ server.on('upgrade', (req, sock) => {
 });
 
 server.listen(PORT, () => {
+  if (!Object.keys(auth.readUsers()).length) console.log('[!] No hay usuarios: ejecuta  node crear-usuarios.js  para poder entrar.');
   console.log('');
   console.log('⛏️  EugeCraft multijugador listo. Direcciones para entrar:');
   console.log(`   En esta máquina:  http://localhost:${PORT}`);

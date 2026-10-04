@@ -7,7 +7,7 @@
   document.body.prepend(renderer.domElement);
 
   const { texture, canvas: atlasCanvas } = createAtlas();
-  const material = new THREE.MeshLambertMaterial({ map: texture });
+  const material = new THREE.MeshLambertMaterial({ map: texture, vertexColors: true });
   // Materiales extra: plantas/antorchas (recorte) y agua (translúcida).
   const materials = {
     opaque: material,
@@ -37,15 +37,38 @@
     ui.showPlaying(false); // overlay "haz clic para jugar"
   }
 
-  // Antes de una partida compartida, asegurar un nombre (identidad para el estado guardado).
   function startServerGame(mapKey, gameId) {
-    if (!Storage.playerName()) {
-      const name = prompt(t('askPlayerName'));
-      if (!name || !name.trim()) return; // sin nombre no arrancamos la compartida
-      Storage.setPlayerName(name);
-    }
     startGame(mapKey, 1, gameId);
   }
+
+  // ---- Login (solo en modo red): el servidor identifica a cada jugador por su usuario ----
+  const loginEl = document.getElementById('login');
+  const whoami = document.getElementById('whoami');
+  function refreshWhoami() {
+    whoami.classList.toggle('hidden', !Auth.token());
+    document.getElementById('whoami-name').textContent = t('loggedAs') + ' ' + Auth.name();
+  }
+  function showLogin() {
+    if (game) backToMenu();
+    refreshWhoami();
+    loginEl.classList.remove('hidden');
+    document.getElementById('login-user').focus();
+  }
+  document.getElementById('login-form').addEventListener('submit', async (e) => {
+    e.preventDefault();
+    const err = await Auth.login(
+      document.getElementById('login-user').value.trim(),
+      document.getElementById('login-pass').value);
+    const msg = { invalid: 'loginInvalid', locked: 'loginLocked', network: 'loginNetwork' }[err];
+    document.getElementById('login-error').textContent = msg ? t(msg) : '';
+    if (err) return;
+    document.getElementById('login-pass').value = '';
+    loginEl.classList.add('hidden');
+    refreshWhoami();
+  });
+  document.getElementById('logoutBtn').addEventListener('click', () => { Auth.logout(); showLogin(); });
+  Auth.onExpire = showLogin;
+  if (NET.available && !Auth.token()) showLogin(); else refreshWhoami();
 
   // Mapas con guardado: elegir partida; con variantes: elegir circuito.
   function selectMap(mapKey) {
@@ -78,7 +101,7 @@
   });
   document.getElementById('winMenuBtn').addEventListener('click', backToMenu);
   document.getElementById('winAgainBtn').addEventListener('click', () => {
-    if (game) startGame(game.mapKey, game.slot);
+    if (game) startGame(game.mapKey, game.slot, game.gameId);
   });
   document.getElementById('respawnBtn').addEventListener('click', () => {
     if (!game) return;
@@ -90,7 +113,7 @@
 
   controls.onLockChange = (locked) => {
     if (game && !game.player.dead && !game.state.won &&
-        !crafting.open && !chestUI.open && !eggUI.open && !picker.open) {
+        !crafting.open && !chestUI.open && !eggUI.open && !picker.open && !game.adventure.book.open) {
       ui.showPlaying(locked);
     }
   };
@@ -131,4 +154,13 @@
     else menuBg.render(dt); // panorama girando detrás del menú
   }
   animate();
+  // Un enlace compartido abre exactamente la misma sala en ambos dispositivos.
+  const invitation=new URLSearchParams(location.search);
+  const invitedMap=invitation.get('map'),invitedGame=invitation.get('game');
+  if(NET.available&&['survival','creative'].includes(invitedMap)&&/^[a-z0-9_-]+$/i.test(invitedGame||'')) {
+    Auth.fetch('/api/games?map='+invitedMap).then(r=>r.json()).then(data=>{
+      if(data.games?.some(g=>g.id===invitedGame))startServerGame(invitedMap,invitedGame);
+      else ui.toast(t('partyMissing'),10000);
+    }).catch(()=>ui.toast(t('serverOffline'),10000));
+  }
 })();

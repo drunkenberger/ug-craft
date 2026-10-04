@@ -1,6 +1,15 @@
 // Items no-bloque (herramientas, armas, comida) y recetas de crafteo.
 // Los bloques usan ids 1-99; los items 100+.
 const ITEMS = {
+  126: {key:'boat',tile:95,kind:'boat'},
+  127: {key:'saddle',tile:96,kind:'saddle'},
+  119: { key: 'seeds', tile: 79, kind: 'seed', crop: 42 },
+  120: { key: 'carrot', tile: 80, kind: 'seed', crop: 44 },
+  121: { key: 'wheat', tile: 81, kind: 'material' },
+  122: { key: 'bread', tile: 82, kind: 'food', heal: 4 },
+  123: { key: 'hoe', tile: 83, kind: 'hoe' },
+  124: { key: 'whistle', tile: 84, kind: 'whistle' },
+  125: { key: 'blueprint', tile: 85, kind: 'blueprint' },
   100: { key: 'pickaxe',     tile: 12, kind: 'weapon', damage: 2, pickTier: 1 },
   101: { key: 'sword',       tile: 13, kind: 'weapon', damage: 3 },
   102: { key: 'crossbow',    tile: 14, kind: 'crossbow', damage: 2 },
@@ -35,6 +44,26 @@ function nameOf(id) {
 
 // Recetas: out = {id, n}; cost = [[id, n], ...]; table = requiere mesa cerca.
 const RECIPES = [
+  {out:{id:126,n:1},cost:[[7,5]],table:true},
+  {out:{id:127,n:1},cost:[[7,3],[112,2]],table:true},
+  { out: { id: 123, n: 1 }, cost: [[7,2],[103,2]], table: true },
+  { out: { id: 119, n: 2 }, cost: [[20,1]], table: false },
+  { out: { id: 120, n: 1 }, cost: [[119,3]], table: false },
+  { out: { id: 122, n: 1 }, cost: [[121,3]], table: true },
+  { out: { id: 124, n: 1 }, cost: [[112,1]], table: true },
+  { out: { id: 125, n: 1 }, cost: [[7,24],[32,20]], table: true },
+  { out: { id: 46, n: 2 }, cost: [[7,4]], table: true },
+  { out: { id: 48, n: 6 }, cost: [[7,3]], table: true },
+  { out: { id: 49, n: 4 }, cost: [[32,3]], table: true },
+  { out: { id: 50, n: 1 }, cost: [[34,4],[35,4],[8,1]], table: true },
+  { out: { id: 53, n: 2 }, cost: [[35,2],[111,1]], table: true },
+  { out: { id: 33, n: 1 }, cost: [[4, 4], [111, 3]], table: true },
+  { out: { id: 34, n: 2 }, cost: [[3, 4], [111, 2]], table: true },
+  { out: { id: 35, n: 4 }, cost: [[4, 4], [3, 1]], table: true },
+  { out: { id: 36, n: 4 }, cost: [[2, 4], [4, 1]], table: true },
+  { out: { id: 37, n: 4 }, cost: [[112, 1], [3, 4]], table: true },
+  { out: { id: 38, n: 4 }, cost: [[32, 4], [6, 1]], table: true },
+  { out: { id: 39, n: 4 }, cost: [[3, 4], [111, 1]], table: true },
   { out: { id: 7,   n: 4 }, cost: [[5, 1]],           table: false }, // tronco → tablones
   { out: { id: 103, n: 4 }, cost: [[7, 2]],           table: false }, // tablones → palos
   { out: { id: 9,   n: 1 }, cost: [[7, 4]],           table: false }, // tablones → mesa
@@ -71,6 +100,10 @@ const FURNACE_RECIPES = [
 
 // Qué suelta un bloque al romperse (0 = nada).
 function dropOf(blockId) {
+  if([63,64,65].includes(blockId))return 49;
+  if (blockId === 47) return 46;
+  if (blockId === 42 || blockId === 43) return 119;
+  if (blockId === 44 || blockId === 45) return 120;
   if (blockId === 6) return 0;  // hojas (a veces sueltan manzana/retoño, ver game.js)
   if (blockId === 12) return 0; // corazón: el regalo es el mensaje
   if (blockId === 13) return 0; // letrero: mejor dejarlo en su lugar
@@ -81,4 +114,22 @@ function dropOf(blockId) {
   if (blockId === 17) return 0;   // agua
   if (blockId === 21) return 0;   // hierba alta
   return blockId;
+}
+
+// Cuatro piezas por material; equiparlas las retira del inventario contado.
+const ARMOR_SLOTS = ['helmet','chestplate','leggings','boots'];
+const ARMOR_TIERS = [
+  {key:'iron',material:112,color:0xc5d2dc,protection:.12},
+  {key:'gold',material:8,color:0xf0bf42,protection:.08},
+  {key:'diamond',material:113,color:0x42dccc,protection:.18},
+];
+for(let tier=0;tier<ARMOR_TIERS.length;tier++) for(let slot=0;slot<4;slot++) {
+  const id=128+tier*4+slot,metal=ARMOR_TIERS[tier];
+  ITEMS[id]={key:metal.key+'_'+ARMOR_SLOTS[slot],tile:97+tier*4+slot,kind:'armor',slot:ARMOR_SLOTS[slot],tier,protection:metal.protection};
+  RECIPES.push({out:{id,n:1},cost:[[metal.material,[5,8,7,4][slot]]],table:true});
+}
+function normalizeArmor(saved={}) {
+  const result={};
+  for(const slot of ARMOR_SLOTS)if(ITEMS[saved?.[slot]]?.kind==='armor'&&ITEMS[saved[slot]].slot===slot)result[slot]=Number(saved[slot]);
+  return result;
 }

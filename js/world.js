@@ -13,7 +13,7 @@ const FACES = [
 function blockOpaque(id) {
   if (!id) return false;
   const def = BLOCKS[id];
-  return !(def && def.solid === false);
+  return !(def && (def.solid === false || def.shape));
 }
 
 class World {
@@ -66,7 +66,7 @@ class World {
     return data[this.blockIndex(wx - cx * CFG.CHUNK, wy, wz - cz * CFG.CHUNK)];
   }
 
-  isSolid(wx, wy, wz) { return blockOpaque(this.getBlock(wx, wy, wz)); }
+  isSolid(wx, wy, wz) { const id=this.getBlock(wx,wy,wz); return !!id && BLOCKS[id].solid !== false; }
 
   // Objetivos para el rayo de romper/poner (sólidos + plantas, sin agua).
   raycastTargets() {
@@ -86,11 +86,24 @@ class World {
       this.edits[`${wx},${wy},${wz}`] = id;
       this.dirty = true;
     }
+    if (this.pendingMeshes) {
+      for (const [a,b] of [[cx,cz],[cx-1,cz],[cx+1,cz],[cx,cz-1],[cx,cz+1]]) this.pendingMeshes.add(this.key(a,b));
+      return;
+    }
     this.buildMesh(cx, cz);
     if (x === 0) this.buildMesh(cx - 1, cz);
     if (x === CFG.CHUNK - 1) this.buildMesh(cx + 1, cz);
     if (z === 0) this.buildMesh(cx, cz - 1);
     if (z === CFG.CHUNK - 1) this.buildMesh(cx, cz + 1);
+  }
+
+  batchEdit(fn) {
+    this.pendingMeshes = new Set();
+    try { fn(); } finally {
+      const dirty = this.pendingMeshes;
+      this.pendingMeshes = null;
+      for (const k of dirty) this.buildMesh(...k.split(',').map(Number));
+    }
   }
 
   findSurface(wx, wz) {
@@ -106,9 +119,9 @@ class World {
     if (!this.chunks.has(k)) return;
     const x0 = cx * CFG.CHUNK, z0 = cz * CFG.CHUNK;
     const bufs = {
-      opaque: { positions: [], normals: [], uvs: [], indices: [] },
-      cross: { positions: [], normals: [], uvs: [], indices: [] },
-      water: { positions: [], normals: [], uvs: [], indices: [] },
+      opaque: { positions: [], normals: [], uvs: [], colors: [], indices: [] },
+      cross: { positions: [], normals: [], uvs: [], colors: [], indices: [] },
+      water: { positions: [], normals: [], uvs: [], colors: [], indices: [] },
     };
 
     const tileUV = (buf, tile, uv) => {
@@ -137,7 +150,7 @@ class World {
                 x + ax, y, z + az,   x + bx, y, z + bz,
                 x + ax, y + 1, z + az,   x + bx, y + 1, z + bz
               );
-              for (let i = 0; i < 4; i++) buf.normals.push(0, 1, 0);
+              for (let i = 0; i < 4; i++) { buf.normals.push(0, 1, 0); buf.colors.push(1,1,1); }
               tileUV(buf, def.side, [0, 0]); tileUV(buf, def.side, [1, 0]);
               tileUV(buf, def.side, [0, 1]); tileUV(buf, def.side, [1, 1]);
               buf.indices.push(base, base + 1, base + 2, base + 2, base + 1, base + 3);
@@ -145,6 +158,19 @@ class World {
             continue;
           }
 
+          if (def.shape) {
+            const buf=bufs.opaque;
+            for (const box of blockBoxes(id)) for (const face of FACES) {
+              const base=buf.positions.length/3, dy=face.dir[1];
+              const tile=dy===1 ? def.top : dy===-1 ? def.bottom : def.side;
+              for (const {pos,uv} of face.corners) {
+                buf.positions.push(x+box[0]+pos[0]*(box[3]-box[0]),y+box[1]+pos[1]*(box[4]-box[1]),z+box[2]+pos[2]*(box[5]-box[2]));
+                buf.normals.push(...face.dir); buf.colors.push(1,1,1); tileUV(buf,tile,uv);
+              }
+              buf.indices.push(base,base+1,base+2,base+2,base+1,base+3);
+            }
+            continue;
+          }
           const isWater = !!def.liquid;
           const buf = isWater ? bufs.water : bufs.opaque;
           for (const face of FACES) {
@@ -157,6 +183,19 @@ class World {
             for (const { pos, uv } of face.corners) {
               buf.positions.push(x + pos[0], y + pos[1], z + pos[2]);
               buf.normals.push(dx, dy, dz);
+              // Oclusión por vértice: oscurece esquinas donde se juntan bloques.
+              const axes = [0,1,2].filter(a => face.dir[a] === 0);
+              const basePos = [x0+x+dx,y+dy,z0+z+dz];
+              const sample = (a,b) => {
+                const q=basePos.slice();
+                if (a !== null) q[axes[0]] += pos[axes[0]] ? 1 : -1;
+                if (b !== null) q[axes[1]] += pos[axes[1]] ? 1 : -1;
+                return blockOpaque(this.getBlock(...q)) ? 1 : 0;
+              };
+              const a=sample(1,null), b=sample(null,1), c=sample(1,1);
+              const occlusion=a && b ? 3 : a+b+c;
+              const shade=def.light || isWater ? 1 : 1-occlusion*.14;
+              buf.colors.push(shade,shade,shade);
               tileUV(buf, tile, uv);
             }
             buf.indices.push(base, base + 1, base + 2, base + 2, base + 1, base + 3);
@@ -182,6 +221,7 @@ class World {
       geo.setAttribute('position', new THREE.Float32BufferAttribute(buf.positions, 3));
       geo.setAttribute('normal', new THREE.Float32BufferAttribute(buf.normals, 3));
       geo.setAttribute('uv', new THREE.Float32BufferAttribute(buf.uvs, 2));
+      geo.setAttribute('color', new THREE.Float32BufferAttribute(buf.colors, 3));
       geo.setIndex(buf.indices);
       const mesh = new THREE.Mesh(geo, material);
       mesh.position.set(x0, 0, z0);

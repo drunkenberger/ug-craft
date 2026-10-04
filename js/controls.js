@@ -14,7 +14,12 @@ class Controls {
     this.onLockChange = null;
 
     document.addEventListener('keydown', (e) => {
+      if(e.target.closest && e.target.closest('input, textarea, select, dialog')) return;
       this.keys.add(e.code);
+      if(e.code==='KeyJ' && !e.repeat && this.locked && this.onAdventure) this.onAdventure();
+      if(e.code==='KeyQ'&&!e.repeat&&this.locked&&this.onRotate)this.onRotate();
+      if(e.code==='ShiftLeft'&&!e.repeat&&this.locked&&this.onDismount)this.onDismount();
+      if(e.code==='KeyR' && !e.repeat && this.locked && this.onCallPets) this.onCallPets();
       const num = parseInt(e.key, 10);
       // 1-8 seleccionan directo; 9 abre el selector completo del inventario.
       if (num >= 1 && num <= 8 && num <= this.hotbar.length) this.selectSlot(num - 1);

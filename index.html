@@ -11,6 +11,7 @@
 <div id="hud" class="hidden">
   <div id="crosshair">+</div>
   <div id="info"></div>
+  <div id="coordinates"></div>
   <div id="netstatus"></div>
   <div id="hint"></div>
   <div id="toast"></div>
@@ -60,6 +61,23 @@
   <div id="map-grid"></div>
   <button id="charBtn" class="btn secondary" data-i18n="charBtn"></button>
   <p id="menu-net"></p>
+  <p id="whoami" class="hidden"><span id="whoami-name"></span> <button id="logoutBtn" class="btn secondary" data-i18n="logout"></button></p>
+</div>
+
+<div id="login" class="hidden">
+  <form class="panel craft-panel" id="login-form" autocomplete="off">
+    <h1 data-i18n="loginTitle"></h1>
+    <label>
+      <span data-i18n="loginUser"></span>
+      <input id="login-user" type="text" autocapitalize="none" autocorrect="off" spellcheck="false" required>
+    </label>
+    <label>
+      <span data-i18n="loginPass"></span>
+      <input id="login-pass" type="password" autocapitalize="none" required>
+    </label>
+    <p id="login-error" class="slots-full" role="alert"></p>
+    <button type="submit" class="btn" data-i18n="loginBtn"></button>
+  </form>
 </div>
 
 <div id="chardiv" class="hidden">
@@ -94,6 +112,7 @@
       <li data-i18n="helpCraft"></li>
       <li data-i18n="helpEat"></li>
       <li data-i18n="helpNight"></li>
+      <li data-i18n="helpAdventure"></li>
       <li data-i18n="helpEsc"></li>
     </ul>
     <button id="menuBtn" class="btn secondary" data-i18n="backToMenu"></button>
@@ -143,44 +162,54 @@
 </div>
 
 <script src="lib/three.min.js"></script>
-<script src="js/i18n.js"></script>
-<script src="js/config.js"></script>
-<script src="js/noise.js"></script>
-<script src="js/textures.js"></script>
-<script src="js/storage.js"></script>
-<script src="js/items.js"></script>
-<script src="js/inventory.js"></script>
-<script src="js/physics.js"></script>
-<script src="js/world.js"></script>
-<script src="js/maps.js"></script>
-<script src="js/survival.js"></script>
-<script src="js/player.js"></script>
-<script src="js/controls.js"></script>
-<script src="js/sky.js"></script>
-<script src="js/daynight.js"></script>
-<script src="js/creature.js"></script>
-<script src="js/character.js"></script>
-<script src="js/charcreator.js"></script>
-<script src="js/mobs.js"></script>
-<script src="js/animals.js"></script>
-<script src="js/crafting.js"></script>
-<script src="js/chest.js"></script>
-<script src="js/eggs.js"></script>
-<script src="js/picker.js"></script>
-<script src="js/soccer.js"></script>
-<script src="js/treasure.js"></script>
-<script src="js/race.js"></script>
-<script src="js/parkour.js"></script>
-<script src="js/maze.js"></script>
-<script src="js/net.js"></script>
-<script src="js/minimap.js"></script>
-<script src="js/netplay.js"></script>
-<script src="js/menubg.js"></script>
-<script src="js/ui.js"></script>
-<script src="js/game-combat.js"></script>
-<script src="js/game-interactions.js"></script>
-<script src="js/game-lifecycle.js"></script>
-<script src="js/game.js"></script>
-<script src="js/main.js"></script>
+<script src="js/i18n.js?v=adoption-5"></script>
+<script src="js/config.js?v=adoption-5"></script>
+<script src="js/noise.js?v=adoption-5"></script>
+<script src="js/textures.js?v=adoption-5"></script>
+<script src="js/auth.js?v=adoption-5"></script>
+<script src="js/storage.js?v=adoption-5"></script>
+<script src="js/items.js?v=adoption-5"></script>
+<script src="js/inventory.js?v=adoption-5"></script>
+<script src="js/physics.js?v=adoption-5"></script>
+<script src="js/world.js?v=adoption-5"></script>
+<script src="js/expedition-world.js?v=adoption-5"></script>
+<script src="js/maps.js?v=adoption-5"></script>
+<script src="js/survival.js?v=adoption-5"></script>
+<script src="js/player.js?v=adoption-5"></script>
+<script src="js/controls.js?v=adoption-5"></script>
+<script src="js/sky.js?v=adoption-5"></script>
+<script src="js/daynight.js?v=adoption-5"></script>
+<script src="js/creature.js?v=adoption-5"></script>
+<script src="js/character.js?v=adoption-5"></script>
+<script src="js/armor.js?v=adoption-5"></script>
+<script src="js/charcreator.js?v=adoption-5"></script>
+<script src="js/mobs.js?v=adoption-5"></script>
+<script src="js/animals.js?v=adoption-5"></script>
+<script src="js/crafting.js?v=adoption-5"></script>
+<script src="js/chest.js?v=adoption-5"></script>
+<script src="js/eggs.js?v=adoption-5"></script>
+<script src="js/picker.js?v=adoption-5"></script>
+<script src="js/soccer.js?v=adoption-5"></script>
+<script src="js/treasure.js?v=adoption-5"></script>
+<script src="js/race.js?v=adoption-5"></script>
+<script src="js/parkour.js?v=adoption-5"></script>
+<script src="js/maze.js?v=adoption-5"></script>
+<script src="js/net.js?v=adoption-5"></script>
+<script src="js/minimap.js?v=adoption-5"></script>
+<script src="js/netplay.js?v=adoption-5"></script>
+<script src="js/menubg.js?v=adoption-5"></script>
+<script src="js/ui.js?v=adoption-5"></script>
+<script src="js/adventure-effects.js?v=adoption-5"></script>
+<script src="js/adventure-ui.js?v=adoption-5"></script>
+<script src="js/travel.js?v=adoption-5"></script>
+<script src="js/expedition.js?v=adoption-5"></script>
+<script src="js/party.js?v=adoption-5"></script>
+<script src="js/expedition-ui.js?v=adoption-5"></script>
+<script src="js/adventure.js?v=adoption-5"></script>
+<script src="js/game-combat.js?v=adoption-5"></script>
+<script src="js/game-interactions.js?v=adoption-5"></script>
+<script src="js/game-lifecycle.js?v=adoption-5"></script>
+<script src="js/game.js?v=adoption-5"></script>
+<script src="js/main.js?v=adoption-5"></script>
 </body>
 </html>

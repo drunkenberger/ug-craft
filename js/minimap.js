@@ -13,6 +13,10 @@ const MINIMAP_COLORS = {
   6: '#3d7a33', 7: '#b08a50', 8: '#f5c542', 9: '#a3763f', 10: '#6f6f6f',
   11: '#9a7030', 12: '#e05a8a', 13: '#c0a060', 14: '#5a5a5a', 15: '#c4a486',
   16: '#7fd8d8', 17: '#3d6fd0', 18: '#eef4fb', 19: '#ffb84d', 20: '#d8e060',
+  41: '#5c3a22',42:'#6cb449',43:'#dcae3b',44:'#4d9e3b',45:'#ed812f',
+  46:'#8c5e2f',47:'#8c5e2f',48:'#b08a50',49:'#8a8a8a',50:'#5d29a1',51:'#ad315f',52:'#d6c6ae',53:'#7dd7ca',
+  33: '#be2b23', 34: '#27193a', 35: '#e6dfd2', 36: '#af5539',
+  37: '#b96f44', 38: '#64794e', 39: '#3a3d44', 40: '#f59132',
   21: '#79b356', 22: '#8fce70', 23: '#c04040',
 };
 
@@ -129,6 +133,13 @@ class Minimap {
       this.drawBlip(av.pos.x - px.x, av.pos.z - px.z, yaw, half, c);
     }
 
+    for(const bag of g.expedition?.data.backpacks||[])this.drawBlip(bag.pos.x-px.x,bag.pos.z-px.z,yaw,half,'#e6ad42');
+    if(g.expedition&&!g.expedition.data.castle&&!isAdventureZone(px.x,px.z)) {
+      const sites=EXPEDITION_SITES.filter((s,i)=>i<3&&!(g.expedition.runes||[])[i]);
+      if(!sites.length)sites.push(EXPEDITION_SITES[3]);
+      const site=sites.sort((a,b)=>Math.hypot(a.x-px.x,a.z-px.z)-Math.hypot(b.x-px.x,b.z-px.z))[0];
+      if(site)this.drawBlip(site.x-px.x,site.z-px.z,yaw,half,'#cba3ee');
+    }
     // Tú: flecha blanca al centro apuntando hacia arriba.
     ctx.save();
     ctx.translate(half, half);

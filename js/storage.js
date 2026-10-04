@@ -71,11 +71,7 @@ const Storage = {
 
   // ---- Identidad del jugador (para el estado guardado en partidas compartidas) ----
   playerName() {
-    return localStorage.getItem('eugecraft.playerName') || '';
-  },
-
-  setPlayerName(name) {
-    localStorage.setItem('eugecraft.playerName', String(name).trim().slice(0, 20));
+    return Auth.user();
   },
 
   // Migra el guardado antiguo de un solo mundo al slot 1.

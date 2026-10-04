@@ -145,6 +145,9 @@ const GameInteractions = {
       if (target && target.inside.y > 0) {
         const { x, y, z } = target.inside;
         const id = this.world.getBlock(x, y, z);
+        if(BLOCKS[id]?.unbreakable)return;
+        if (adventureBreak(this,x,y,z,id)) return;
+        if (id === 40) return; // la mecha sigue encendida
         const def = BLOCKS[id];
         // Minerales duros: exigen nivel de pico (solo en supervivencia).
         if (!this.inventory.isFree() && def && def.needTier && this.pickTier() < def.needTier) {
@@ -155,7 +158,8 @@ const GameInteractions = {
         if (this.net) NET.send({ t: 'block', x, y, z, id: 0 });
         trackBlockChange(this, x, y, z, 0);
         if (!this.inventory.isFree()) {
-          if (id === 6) {
+          if (id === 21) { this.inventory.add(119,1); }
+          else if (id === 6) {
             // Hojas: a veces sueltan manzana o retoño.
             const r = Math.random();
             if (r < 0.12) { this.inventory.add(117, 1); this.ui.toast(`${t('gotFood')} ${nameOf(117)}!`); }
@@ -180,8 +184,16 @@ const GameInteractions = {
       if (this.player.sitting) { this.standUp(); return; }
       if (this.map.onRightClick && this.map.onRightClick(this)) return;
 
-      // Perro salvaje en la mira: se adopta con un hueso.
+      // Aventuras y mascotas comparten el mismo clic contextual.
       const creature = this.targetCreature();
+      const adventureTarget = this.targetBlock();
+      if(this.map.canBuild && adventureRightClick(this,creature,adventureTarget)) return;
+      if (creature && creature.netType === 'piglin') {
+        if (this.selectedId() === 8 && this.inventory.remove(8, 1)) {
+          this.inventory.add(35, 4); this.ui.toast(t('tradeDone'));
+        } else this.ui.toast(t('piglinTrade'), 6000);
+        return;
+      }
       if (creature && creature.species === 'dog' && !creature.tamed) {
         if (this.selectedId() === 118 && this.inventory.remove(118, 1)) {
           this.tameDog(creature);
@@ -195,6 +207,8 @@ const GameInteractions = {
       // Clic derecho sobre mesa / horno / cofre / cama: usar el bloque.
       if (target) {
         const targetId = this.world.getBlock(target.inside.x, target.inside.y, target.inside.z);
+        if (targetId === 33) { lightTnt(this, target.inside); return; }
+        if (targetId === 40) return;
         if (this.map.crafting && targetId === 9) { this.openCrafting(); return; }
         if (this.map.crafting && targetId === 10) { this.openFurnace(); return; }
         if (targetId === 13 && this.map.onSign) { this.map.onSign(this, target.inside); return; }
@@ -225,14 +239,19 @@ const GameInteractions = {
       const placedDef = BLOCKS[id];
       if (placedDef.solid !== false && this.player.wouldCollide(x, y, z)) return;
       if (this.inventory.count(id) < 1) return;
-      this.world.setBlock(x, y, z, id);
-      if (this.net) NET.send({ t: 'block', x, y, z, id });
-      trackBlockChange(this, x, y, z, id);
+      const placedId=id===49?[49,63,64,65][this.expedition.rotation]:id;
+      this.world.setBlock(x, y, z, placedId);
+      if (this.net) NET.send({ t: 'block', x, y, z, id:placedId });
+      trackBlockChange(this, x, y, z, placedId);
       this.inventory.remove(id, 1);
     };
 
     this.controls.onSlotChange = () => this.refreshHotbar();
     this.controls.onOpenCraft = () => this.openCrafting();
+    this.controls.onAdventure = () => {if(this.map.canBuild)this.adventure.book.show();};
+    this.controls.onDismount=()=>this.expedition.travel.dismount();
+    this.controls.onRotate=()=>{this.expedition.rotation=(this.expedition.rotation+1)%4;this.ui.toast(t('stairsDirection')+' '+['↑','←','↓','→'][this.expedition.rotation]);};
+    this.controls.onCallPets = () => {if(this.map.canBuild)this.adventure.callPets();};
     this.controls.onOpenPicker = () => this.openPicker();
     // En modo kart, Espacio/Enter disparan lo mismo que el clic (láser).
     this.controls.onFireKey = this.map.driving && this.map.onClick

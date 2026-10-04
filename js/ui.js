@@ -127,7 +127,7 @@ class UI {
       h.textContent = text;
       return h;
     };
-    const api = (opts) => fetch(`/api/games?map=${mapKey}${opts && opts.id ? '&id=' + opts.id : ''}`, opts);
+    const api = (opts) => Auth.fetch(`/api/games?map=${mapKey}${opts && opts.id ? '&id=' + opts.id : ''}`, opts);
 
     const render = async () => {
       list.replaceChildren();
@@ -136,7 +136,7 @@ class UI {
       if (online) {
         list.append(heading(t('sharedGames')));
         let games = null;
-        try { games = (await (await fetch(`/api/games?map=${mapKey}`)).json()).games; } catch (e) { games = null; }
+        try { games = (await (await Auth.fetch(`/api/games?map=${mapKey}`)).json()).games; } catch (e) { games = null; }
         if (!games) {
           const p = document.createElement('p');
           p.className = 'slots-full';
@@ -203,12 +203,15 @@ class UI {
                 health: pl.health,
                 hunger: pl.hunger,
                 day: data.day,
+                respawn:data.respawn,
                 inventory: data.inventory || [],
+                adventure: data.adventure || {},
+                pets: data.pets || [],
               };
             }
             await api({
               method: 'POST', headers: { 'Content-Type': 'application/json' },
-              body: JSON.stringify({ edits: data.edits || {}, time: data.time ?? null, players }),
+              body: JSON.stringify({ edits: data.edits || {}, time: data.time ?? null, rules: data.worldRules || {}, players }),
             });
             this.toast(t('uploaded'));
             render();
@@ -332,8 +335,8 @@ class UI {
 
   setNetStatus(players) {
     const el = document.getElementById('netstatus');
-    el.textContent = players ? `🌐 ${players}` : '';
-    el.title = players ? `${players} jugador(es) en línea` : '';
+    el.textContent = players ? `🌐 ${players} ${t('partyPlayers')}` : players===0?t('partyLocalBadge'):t('partyConnecting');
+    el.title = t('partyOpenBook');
   }
 
   damageFlash() {

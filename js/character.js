@@ -101,6 +101,30 @@ class Humanoid extends Creature {
     } else {
       part(head, 0.43, 0.04, 0.43, hair, 0, 0.23, 0); // rapado
     }
+    if(app.armor)this.addArmor(app.armor);
+    this.setSitting(!!this.sitting);
+  }
+
+  addArmor(equipment) {
+    const piece=(parent,w,h,d,material,x,y,z)=>{
+      const mesh=new THREE.Mesh(new THREE.BoxGeometry(w,h,d),material);
+      mesh.position.set(x,y,z);mesh.name='armor';parent.add(mesh);
+    };
+    for(const [slot,id] of Object.entries(normalizeArmor(equipment))) {
+      const mat=this.mat(ARMOR_TIERS[ITEMS[id].tier].color);
+      if(slot==='helmet') {
+        piece(this.head,.54,.12,.62,mat,0,.32,.03);
+        piece(this.head,.07,.38,.53,mat,-.25,.09,0);
+        piece(this.head,.07,.38,.53,mat,.25,.09,0);
+        piece(this.head,.5,.4,.07,mat,0,.08,-.26);
+      }
+      if(slot==='chestplate') {
+        piece(this.group,.55,.65,.32,mat,0,1.1,0);
+        for(const arm of [this.armL,this.armR])piece(arm,.22,.28,.24,mat,0,-.06,0);
+      }
+      if(slot==='leggings')for(const leg of [this.legL,this.legR])piece(leg,.235,.55,.24,mat,0,-.28,0);
+      if(slot==='boots')for(const leg of [this.legL,this.legR])piece(leg,.245,.23,.31,mat,0,-.665,.025);
+    }
   }
 
   // Caminar: piernas y brazos se balancean en oposición.

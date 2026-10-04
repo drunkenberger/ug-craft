@@ -12,7 +12,10 @@ class RemoteAvatar {
     this.yaw = 0;
     this.phase = 0;
     this.lastPos = new THREE.Vector3();
+    this.boat=createBoatModel(scene);this.vehicle=null;
   }
+
+  setVehicle(mode){this.vehicle=['horse','boat'].includes(mode)?mode:null;this.model.setSitting(!!this.vehicle||!!this.seated);}
 
   // Apariencia personalizada del otro jugador (llega por red al conectarse).
   setAppearance(app) {
@@ -23,13 +26,16 @@ class RemoteAvatar {
     this.pos.set(x, y, z);
     this.yaw = yaw;
     this.down = !!down; // derribado por una barrida
+    this.seated=!!sit;
     const sitting = !!sit;
     if (sitting !== this.model.sitting) this.model.setSitting(sitting);
   }
 
   update(dt) {
     const g = this.model.group;
-    g.position.lerp(this.pos, Math.min(1, dt * 12));
+    const shown=this.pos.clone();if(this.vehicle==='horse')shown.y+=.5;if(this.vehicle==='boat')shown.y-=.3;
+    g.position.lerp(shown, Math.min(1, dt * 12));
+    this.boat.group.visible=this.vehicle==='boat';this.boat.group.position.copy(this.pos);this.boat.group.rotation.y=this.yaw;
     g.rotation.y = this.yaw + Math.PI;
     // Derribado: tumbado en el suelo, sin animación de piernas.
     if (this.down) {
@@ -50,7 +56,7 @@ class RemoteAvatar {
     }
   }
 
-  dispose() { this.model.die(); }
+  dispose() { this.boat.dispose();this.model.die(); }
 }
 
 class PuppetManager {
@@ -71,7 +77,10 @@ class PuppetManager {
       p.target.set(e.x, e.y, e.z);
       p.ry = e.ry;
       // Perro adoptado en el anfitrión: el títere muestra el collar (y la cola).
-      if (e.tm && !p.creature.tamed && p.creature.setTamed) p.creature.setTamed(null);
+      if(e.tm && p.creature.setTamed) {
+        if(!p.creature.tamed) p.creature.setTamed(e.ow);
+        p.creature.owner=e.ow; p.creature.setPetName(e.pn);applyPetState(p.creature,e.ps||{});p.creature.rider=e.rd;
+      }
     }
     for (const [k, p] of this.puppets) {
       if (!seen.has(k)) { p.creature.die(); this.puppets.delete(k); }
@@ -83,6 +92,8 @@ class PuppetManager {
     if (e.ty === 'zombie') c = new Zombie(this.scene, e.x, e.y, e.z);
     else if (e.ty === 'skeleton') c = new Skeleton(this.scene, e.x, e.y, e.z, () => {});
     else if (e.ty === 'spider') c = new Spider(this.scene, e.x, e.y, e.z);
+    else if (e.ty === 'villager') c = new Villager(this.scene,e.x,e.y,e.z,e.pr);
+    else if (e.ty === 'piglin') c = new Piglin(this.scene, e.x, e.y, e.z);
     else if (e.ty === 'creeper') c = new Creeper(this.scene, e.x, e.y, e.z, () => {});
     else c = new Animal(this.scene, e.ty, e.x, e.y, e.z);
     c.netId = e.k; // usar el id del anfitrión para reportar golpes
@@ -94,6 +105,8 @@ class PuppetManager {
       p.creature.group.position.lerp(p.target, Math.min(1, dt * 12));
       p.creature.pos.copy(p.creature.group.position);
       p.creature.group.rotation.y = p.ry;
+      if(p.creature.saddle)p.creature.saddle.visible=!!p.creature.rider;
+      if(p.creature.legs && p.creature.tamed)p.creature.legs.forEach(leg=>{leg.rotation.x=p.creature.waiting?.8:0;});
       if (p.creature.tail) { // cola del perro también en los títeres
         p.creature.wagT += dt;
         p.creature.tail.rotation.y = Math.sin(p.creature.wagT * (p.creature.tamed ? 9 : 3)) * 0.4;

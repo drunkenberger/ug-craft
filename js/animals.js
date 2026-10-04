@@ -1,5 +1,14 @@
+function petState(pet) {return {waiting:!!pet.waiting,color:pet.collarColor||'red',health:pet.health,love:pet.loveTimer||0};}
+function applyPetState(pet,state={}) {
+  pet.waiting=!!state.waiting;
+  if(Number.isFinite(state.love))pet.loveTimer=Math.max(0,Math.min(4,state.love));
+  if(typeof COLLAR_COLORS!=='undefined'&&COLLAR_COLORS[state.color])pet.setCollar(state.color);
+  if(Number.isFinite(state.health))pet.health=Math.max(1,Math.min(pet.def.health,state.health));
+}
 // Animales pacíficos: deambulan, huyen al ser golpeados y dan comida al cazarlos.
 const SPECIES = {
+  cat: {health:4,drop:0,halfW:.24,height:.65,scale:.65,body:0xc59b62,dark:0x614531},
+  horse: {health:7,drop:0,halfW:.42,height:1.55,scale:1.45,body:0x9c6747,dark:0x443126},
   pig: {
     health: 2, drop: 107, halfW: 0.35, height: 0.85, scale: 1,
     body: 0xe8a0a8, dark: 0xc87880,
@@ -60,10 +69,11 @@ class Animal extends Creature {
       head.add(e);
     }
 
+    if(this.species==='horse'){this.saddle=this.box(.75,.13,.65,this.mat(0x703b27),0,1.22,0);this.saddle.visible=false;}
     // Perro: orejas caídas y cola que menea.
-    if (this.species === 'dog') {
+    if (['dog','cat','horse'].includes(this.species)) {
       for (const ex of [-0.2, 0.2]) {
-        const ear = new THREE.Mesh(new THREE.BoxGeometry(0.08 * s, 0.2 * s, 0.12 * s), dark);
+        const ear = new THREE.Mesh(new THREE.BoxGeometry(0.08 * s, (this.species === 'cat' ? .3 : .2) * s, 0.12 * s), dark);
         ear.position.set(ex * s, 0.18 * s, -0.05 * s);
         head.add(ear);
       }
@@ -76,6 +86,30 @@ class Animal extends Creature {
       this.wagT = 0;
     }
   }
+
+  setCollar(color) {
+    this.collarColor=color;
+    if(this.collar && typeof COLLAR_COLORS!=='undefined')this.collar.material.color.setHex(COLLAR_COLORS[color]||COLLAR_COLORS.red);
+  }
+  setPetName(name) {
+    const clean=String(name||'').trim().slice(0,20);
+    if(this.petName===clean)return;
+    this.petName=clean;
+    if(typeof document==='undefined')return;
+    if(!clean) {if(this.nameLabel)this.nameLabel.visible=false;return;}
+    const canvas=document.createElement('canvas');canvas.width=256;canvas.height=64;
+    const ctx=canvas.getContext('2d');ctx.fillStyle='rgba(12,24,16,.8)';ctx.fillRect(0,0,256,64);
+    ctx.fillStyle='#fff';ctx.font='bold 24px monospace';ctx.textAlign='center';ctx.fillText(clean,128,42,244);
+    if(this.nameTexture)this.nameTexture.dispose();
+    this.nameTexture=new THREE.CanvasTexture(canvas);
+    if(!this.nameLabel) {
+      const material=new THREE.SpriteMaterial({map:this.nameTexture,depthTest:true});
+      this.materials.push(material);this.nameLabel=new THREE.Sprite(material);
+      this.nameLabel.position.y=this.height+.7;this.nameLabel.scale.set(2,.5,1);this.group.add(this.nameLabel);
+    } else {this.nameLabel.material.map=this.nameTexture;this.nameLabel.material.needsUpdate=true;}
+    this.nameLabel.visible=true;
+  }
+  die() {if(this.nameTexture){this.nameTexture.dispose();this.nameTexture=null;}super.die();}
 
   // Adoptar: collar rojo, deja de huir y sigue a su dueño.
   setTamed(owner) {
@@ -96,10 +130,28 @@ class Animal extends Creature {
 
   update(dt, world, targets) {
     if (this.dead) return;
+    if (this.dead) return;
     this.updateFlash(dt);
     this.wanderTimer -= dt;
     this.fleeTimer = Math.max(0, this.fleeTimer - dt);
 
+    if(this.saddle)this.saddle.visible=!!this.rider;
+    if(this.rider) {
+      const rider=targets.find(t=>t.id===this.rider&&!t.dead);
+      if(rider) {
+        this.walkPhase+=this.pos.distanceTo(rider.pos)*2;this.pos.copy(rider.pos);this.vel.set(0,0,0);
+        this.group.position.copy(this.pos);this.group.rotation.y=(rider.yaw||0)+Math.PI;
+        this.legs.forEach((leg,i)=>leg.rotation.x=Math.sin(this.walkPhase)*(i%2? .5:-.5));return;
+      }
+      this.rider=null;
+    }
+    this.loveTimer=Math.max(0,(this.loveTimer||0)-dt);
+    if(this.tamed&&this.waiting) {
+      this.vel.x=0;this.vel.z=0;this.physics(dt,world);
+      this.legs.forEach(leg=>leg.rotation.x=.8);
+      if(this.tail)this.tail.rotation.y=Math.sin((this.wagT+=dt)*8)*.5;
+      return;
+    }
     // Perro adoptado: sigue a su dueño (y se teletransporta si queda muy atrás).
     if (this.tamed) {
       this.wagT += dt;
@@ -123,7 +175,7 @@ class Animal extends Creature {
       } else {
         this.moveDir = null;
       }
-      if (this.tail) this.tail.rotation.y = Math.sin(this.wagT * 9) * 0.5;
+      if (this.tail) this.tail.rotation.y = Math.sin(this.wagT * (this.loveTimer>0?15:9)) * 0.5;
       if (this.moveDir) {
         this.vel.x = this.moveDir.x * this.speed;
         this.vel.z = this.moveDir.z * this.speed;
@@ -238,10 +290,11 @@ class AnimalManager {
   }
 
   // Recrea un perro adoptado desde el guardado de la partida.
-  spawnPet(x, y, z) {
-    const dog = new Animal(this.scene, 'dog', x, y, z);
-    dog.setTamed('local');
-    this.animals.push(dog);
+  spawnPet(x,y,z,species='dog',name='',owner='local',state={}) {
+    if(!['dog','cat','horse'].includes(species)) species='dog';
+    const pet=new Animal(this.scene,species,x,y,z);
+    pet.setTamed(owner); pet.setPetName(name); applyPetState(pet,state);
+    this.animals.push(pet); return pet;
   }
 
   collectMeshes(out) {

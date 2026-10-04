@@ -21,9 +21,10 @@ const NET = {
     this.peers = new Set();
     this.isHost = false;
     const proto = location.protocol === 'https:' ? 'wss:' : 'ws:';
-    this.ws = new WebSocket(`${proto}//${location.host}`);
-    this.ws.onopen = () => this.send({ t: 'join', room: this.room, player: this.player });
-    this.ws.onmessage = (e) => {
+    const socket = this.ws = new WebSocket(`${proto}//${location.host}`);
+    socket.onopen = () => {if(this.ws===socket&&this.handlers)this.send({ t: 'join', room: this.room, player: this.player, token: typeof Auth !== 'undefined' ? Auth.token() : '' });};
+    socket.onmessage = (e) => {
+      if(this.ws!==socket||!this.handlers)return;
       let msg;
       try { msg = JSON.parse(e.data); } catch (err) { return; }
       if (msg.t === 'welcome') {
@@ -41,7 +42,8 @@ const NET = {
       if (fn) fn(msg);
     };
     // Si la conexión se cae (o nunca abre), reintentar mientras siga la partida.
-    this.ws.onclose = () => {
+    socket.onclose = () => {
+      if(this.ws!==socket||!this.handlers)return;
       if (this.handlers && this.handlers.closed) this.handlers.closed();
       if (this.handlers) {
         this.retryTimer = setTimeout(() => this.connect(), 2000);

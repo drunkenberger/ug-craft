@@ -1,5 +1,5 @@
 {
   "scripts": {
-    "test": "node tests/eugecraft-content.test.js"
+    "test": "node tests/eugecraft-content.test.js && node tests/exploration.test.js && node tests/adventure.test.js && node tests/expedition.test.js && node tests/worlds-armor.test.js && node tests/network.test.js && node tests/auth.test.js"
   }
 }

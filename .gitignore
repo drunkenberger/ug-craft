@@ -3,3 +3,5 @@
 .playwright-mcp/
 worlds/
 backups/
+users.json
+.secret

@@ -24,7 +24,10 @@ const GameCombat = {
     if (this.animals) this.animals.collectMeshes(meshes);
     if (this.puppets) this.puppets.collectMeshes(meshes);
     const hits = this.centerRay().intersectObjects(meshes);
-    return hits.length ? hits[0].object.userData.creature : null;
+    if (!hits.length) return null;
+    const wall = this.centerRay().intersectObjects(this.world.raycastTargets())[0];
+    if (wall && wall.distance < hits[0].distance) return null;
+    return hits[0].object.userData.creature;
   },
 
   hittableCreatures() {
@@ -38,6 +41,7 @@ const GameCombat = {
   tameDog(creature) {
     if (this.net && !NET.isHost) {
       NET.send({ t: 'tame', mob: creature.netId });
+      creature.setTamed(NET.id); // Evita gastar otro hueso mientras llega la confirmación visual.
     } else {
       creature.setTamed('local');
     }
@@ -85,6 +89,7 @@ const GameCombat = {
 
   updateBolts(dt) {
     for (const b of this.bolts) {
+      if(b.hostile && this.worldRules.peaceful && this.map.canBuild) {b.dead=true;continue;}
       b.life -= dt;
       b.vel.y -= (b.hostile ? 3 : 9) * dt; // las flechas enemigas caen menos (mejor puntería)
       b.mesh.position.addScaledVector(b.vel, dt);
