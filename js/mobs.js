@@ -351,6 +351,9 @@ class Piglin extends Zombie {
   }
 }
 
+// Mobs pacíficos: no cuentan para el tope nocturno ni se retiran con la regla «sin enemigos».
+const PEACEFUL_MOBS = ['piglin', 'villager', 'irongolem'];
+
 // Qué suelta cada enemigo al morir a manos de un jugador: [itemId, cantidad].
 const MOB_DROPS = { zombie: [118, 1], skeleton: [110, 2], spider: [111, 1], creeper: [111, 2] };
 
@@ -392,17 +395,19 @@ class MobManager {
           if(!this.zombies.some(c=>c.netType==='villager'&&c.profession===role&&Math.hypot(c.home.x-x,c.home.z-z)<12))
             this.zombies.push(new Villager(this.scene,x+dx,y,z+dz,role));
         }
+        if(!this.zombies.some(c=>c.netType==='irongolem'&&!c.owner&&Math.hypot(c.home.x-x,c.home.z-z)<12))
+          this.spawnGolem(x-3,y,z+3,null);
       }
     }
     this.spawnTimer -= dt;
-    if (isNight && this.spawnTimer <= 0 && this.zombies.filter(c => !['piglin','villager'].includes(c.netType)).length < maxMobs && targets.length) {
+    if (isNight && this.spawnTimer <= 0 && this.zombies.filter(c => !PEACEFUL_MOBS.includes(c.netType)).length < maxMobs && targets.length) {
       this.trySpawn(targets);
       this.spawnTimer = 6;
     }
     for (const z of this.zombies) {
-      if(maxMobs===0 && !['piglin','villager'].includes(z.netType)) { z.onDie=null; z.die(); continue; }
+      if(maxMobs===0 && !PEACEFUL_MOBS.includes(z.netType)) { z.onDie=null; z.die(); continue; }
       z.allowTerrainDamage=this.allowTerrainDamage !== false;
-      z.update(dt, this.world, targets, isNight);
+      z.update(dt, this.world, targets, isNight, this.zombies);
     }
     this.zombies = this.zombies.filter((z) => !z.dead);
   }
@@ -429,6 +434,17 @@ class MobManager {
       if (drop) this.onDrop(drop[0], drop[1], mob.lastHitBy);
     };
     this.zombies.push(mob);
+  }
+
+  // Golem de hierro: de un jugador (owner) o guardián de aldea (null). Matarlo a mano suelta hierro.
+  spawnGolem(x, y, z, owner, health) {
+    const golem = new IronGolem(this.scene, x, y, z, owner);
+    if (Number.isFinite(health)) golem.health = Math.max(1, Math.min(20, health));
+    golem.onDie = () => {
+      if (golem.lastHitBy !== undefined && this.onDrop) this.onDrop(112, 3, golem.lastHitBy);
+    };
+    this.zombies.push(golem);
+    return golem;
   }
 
   collectMeshes(out) {

@@ -3,6 +3,7 @@
 const ITEMS = {
   126: {key:'boat',tile:95,kind:'boat'},
   127: {key:'saddle',tile:96,kind:'saddle'},
+  140: {key:'irongolem',tile:109,kind:'golem'},
   119: { key: 'seeds', tile: 79, kind: 'seed', crop: 42 },
   120: { key: 'carrot', tile: 80, kind: 'seed', crop: 44 },
   121: { key: 'wheat', tile: 81, kind: 'material' },
@@ -46,6 +47,7 @@ function nameOf(id) {
 const RECIPES = [
   {out:{id:126,n:1},cost:[[7,5]],table:true},
   {out:{id:127,n:1},cost:[[7,3],[112,2]],table:true},
+  {out:{id:140,n:1},cost:[[112,6]],table:true},
   { out: { id: 123, n: 1 }, cost: [[7,2],[103,2]], table: true },
   { out: { id: 119, n: 2 }, cost: [[20,1]], table: false },
   { out: { id: 120, n: 1 }, cost: [[119,3]], table: false },

@@ -11,16 +11,22 @@ function normalizeWorldRules(r={}) {
   return {peaceful:r.peaceful===true,terrainDamage:r.terrainDamage!==false};
 }
 function serializePets(game) {
-  return game.hittableCreatures().filter(c=>c.tamed && !c.dead &&
+  return game.hittableCreatures().filter(c=>(c.tamed||c.netType==='irongolem') && !c.dead &&
     c.owner===(game.net && !NET.isHost ? NET.id : 'local'))
     .map(c=>[c.pos.x,c.pos.y,c.pos.z,c.species,c.petName || '',petState(c)]);
 }
 function restorePets(game,entries,owner='local') {
   if(!game.animals || !Array.isArray(entries)) return;
   // Reintentar la restauración nunca duplica los animales del mismo dueño.
-  if(game.animals.animals.some(c=>c.tamed && c.owner===owner && !c.dead)) return;
+  const hadPets=game.animals.animals.some(c=>c.tamed && c.owner===owner && !c.dead);
+  const hadGolems=game.mobs?.zombies.some(c=>c.netType==='irongolem' && c.owner===owner && !c.dead);
   for(const pet of entries.slice(0,12)) {
     if(!Array.isArray(pet) || !pet.slice(0,3).every(Number.isFinite)) continue;
+    if(pet[3]==='irongolem') {
+      if(!hadGolems) game.mobs?.spawnGolem(pet[0],pet[1],pet[2],owner,pet[5]?.health);
+      continue;
+    }
+    if(hadPets) continue;
     game.animals.spawnPet(pet[0],pet[1],pet[2],pet[3],pet[4],owner,pet[5]);
   }
 }
@@ -191,6 +197,7 @@ function adventureRightClick(g,creature,target) {
   if(target&&g.world.getBlock(target.inside.x,target.inside.y,target.inside.z)===50){g.adventure.portal();return true;}
   if(target&&[55,56,57].includes(g.world.getBlock(target.inside.x,target.inside.y,target.inside.z)))return g.expedition.interact(target);
   if(item?.kind==='armor'){g.armor.equip(selected);return true;}
+  if(item?.kind==='golem')return placeGolem(g,target);
   if(creature?.netType==='villager') {g.adventure.book.page='village';g.adventure.book.show();return true;}
   if(creature?.tamed) {
     if(item?.kind==='saddle' && creature.species==='horse')g.expedition.travel.mount(creature);

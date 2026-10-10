@@ -76,6 +76,7 @@ class PuppetManager {
       }
       p.target.set(e.x, e.y, e.z);
       p.ry = e.ry;
+      if (e.ty === 'irongolem') p.creature.owner = e.ow ?? null;
       // Perro adoptado en el anfitrión: el títere muestra el collar (y la cola).
       if(e.tm && p.creature.setTamed) {
         if(!p.creature.tamed) p.creature.setTamed(e.ow);
@@ -94,6 +95,7 @@ class PuppetManager {
     else if (e.ty === 'spider') c = new Spider(this.scene, e.x, e.y, e.z);
     else if (e.ty === 'villager') c = new Villager(this.scene,e.x,e.y,e.z,e.pr);
     else if (e.ty === 'piglin') c = new Piglin(this.scene, e.x, e.y, e.z);
+    else if (e.ty === 'irongolem') c = new IronGolem(this.scene, e.x, e.y, e.z, e.ow ?? null);
     else if (e.ty === 'creeper') c = new Creeper(this.scene, e.x, e.y, e.z, () => {});
     else c = new Animal(this.scene, e.ty, e.x, e.y, e.z);
     c.netId = e.k; // usar el id del anfitrión para reportar golpes

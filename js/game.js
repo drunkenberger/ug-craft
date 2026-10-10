@@ -278,6 +278,11 @@ class Game {
         const c = this.findCreature(msg.mob);
         if (c && ['dog','cat','horse'].includes(c.species) && !c.tamed) c.setTamed(msg.from);
       },
+      golem: (msg) => { // un invitado fabricó un golem: el anfitrión lo crea a su nombre
+        if (!NET.isHost || !this.mobs || ![msg.x, msg.y, msg.z].every(Number.isFinite)) return;
+        const mine = this.mobs.zombies.filter((c) => c.netType === 'irongolem' && !c.dead && c.owner === msg.from);
+        if (mine.length < GOLEM_MAX_PER_PLAYER) this.mobs.spawnGolem(msg.x + 0.5, msg.y, msg.z + 0.5, msg.from);
+      },
       rules: (msg) => {this.worldRules=normalizeWorldRules(msg.rules);},
       petaction: (msg) => this.adventure.petAction(msg,msg.from),
       petrestore: (msg) => restorePets(this,msg.pets,msg.from),
@@ -415,7 +420,7 @@ class Game {
         this.netTimers.mobs = 0;
         const list = [];
         if (this.mobs) for (const c of this.mobs.zombies) {
-          list.push({ k: c.netId, ty: c.netType, x: c.pos.x, y: c.pos.y, z: c.pos.z, ry: c.group.rotation.y, pr:c.profession });
+          list.push({ k: c.netId, ty: c.netType, x: c.pos.x, y: c.pos.y, z: c.pos.z, ry: c.group.rotation.y, pr:c.profession, ow:c.netType==='irongolem'?(c.owner==='local'?NET.id:c.owner):undefined });
         }
         if (this.animals) for (const c of this.animals.animals) {
           list.push({ k: c.netId, ty: c.netType, x: c.pos.x, y: c.pos.y, z: c.pos.z, ry: c.group.rotation.y, tm: c.tamed ? 1 : 0, ow:c.owner==='local'?NET.id:c.owner, pn:c.petName||'', ps:petState(c), rd:c.rider==='local'?NET.id:c.rider });

@@ -1,7 +1,7 @@
 const fs=require('node:fs');
 const vm=require('node:vm');
 const context={THREE:require('../lib/three.min.js'),console};vm.createContext(context);
-for(const file of ['config','noise','textures','world','expedition-world','maps','physics','creature','mobs','animals','survival','inventory','items','i18n','adventure-effects','expedition','adventure'])
+for(const file of ['config','noise','textures','world','expedition-world','maps','physics','creature','mobs','golem','animals','survival','inventory','items','i18n','adventure-effects','expedition','adventure'])
   vm.runInContext(fs.readFileSync(`js/${file}.js`,'utf8'),context);
 vm.runInContext(`
 function check(c,m){if(!c)throw Error(m);}
@@ -69,7 +69,7 @@ g.worldRules.terrainDamage=false;w.setBlock(2,4,2,40);w.setBlock(3,4,2,7);explod
 check(w.getBlock(2,4,2)===0 && w.getBlock(3,4,2)===7,'protected terrain destroyed');
 const mgr=new MobManager(scene,w,()=>[{pos:player.pos,damage(){}}],()=>{},()=>{});
 mgr.zombies.push(new Zombie(scene,20,4,20));mgr.update(.1,true,0);
-check(mgr.zombies.every(c=>['piglin','villager'].includes(c.netType)),'peaceful mode kept enemies');
+check(mgr.zombies.every(c=>PEACEFUL_MOBS.includes(c.netType)),'peaceful mode kept enemies');
 // Each visible block/item has both languages and painted textures.
 for(const [id,def] of Object.entries(BLOCKS))check(I18N.es['block_'+def.key] && I18N.en['block_'+def.key] && TILE_PAINTERS[def.side],'missing block content '+id);
 for(let id=119;id<=125;id++)check((id===121 || RECIPES.some(r=>r.out.id===id)) && MAPS.creative.hotbar.includes(id),'missing craft/creative item '+id);

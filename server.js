@@ -316,6 +316,7 @@ function handleMessage(sock, state, msg) {
     case 'petaction':
     case 'petrestore':
     case 'hit':    // golpe a un mob: solo lo procesa el anfitrión
+    case 'golem':  // golem fabricado por un invitado: lo crea el anfitrión
     case 'tame':   // adopción de un perro: la aplica el anfitrión
     case 'kick':   // patada al balón (fútbol)
     case 'slide': { // barrida (fútbol)

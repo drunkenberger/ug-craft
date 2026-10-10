@@ -514,6 +514,16 @@ const ICON_ART = {
     '..AAAA..',
     '........',
   ],
+  109: [ // golem de hierro
+    '..IIII..',
+    '.IWWWWI.',
+    '.IKWWKI.',
+    '.IIWGII.',
+    'GIIIIIIG',
+    'GIILLIIG',
+    '.GIIIIG.',
+    '..GGGG..',
+  ],
   48: [ // hueso
     'OO......',
     'OOO.....',
