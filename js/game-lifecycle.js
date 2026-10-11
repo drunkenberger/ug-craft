@@ -1,5 +1,15 @@
 // Extracted Game methods for game-lifecycle.
 const GameLifecycle = {
+  // Los caballos con jinete remoto se ocultan: cada jinete dibuja el suyo (RemoteAvatar / Travel).
+  hideRiddenHorses() {
+    const ids = new Set();
+    for (const [id, av] of this.avatars) if (av.vehicle === 'horse') ids.add(id);
+    if (this.net && !NET.isHost && this.expedition.travel.mode === 'horse') ids.add(NET.id);
+    const pets = this.puppets ? [...this.puppets.puppets.values()].map((p) => p.creature) : [];
+    if (this.animals) pets.push(...this.animals.animals);
+    for (const c of pets) if (c.species === 'horse') c.group.visible = !(c.rider && ids.has(c.rider));
+  },
+
   updateOwnAvatar(dt) {
     const show = this.cameraMode === 'third' && this.map.ownAvatar && !this.player.dead;
     if (!show) {
@@ -90,6 +100,7 @@ const GameLifecycle = {
     // Multijugador: avatares, títeres de mobs y sincronización.
     for (const av of this.avatars.values()) av.update(dt);
     if (this.puppets) this.puppets.update(dt);
+    this.hideRiddenHorses();
     this.netTick(dt);
     if (this.minimap) this.minimap.update(dt);
 

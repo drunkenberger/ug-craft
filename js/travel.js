@@ -8,7 +8,7 @@ function createBoatModel(scene) {
   return {group,dispose(){scene.remove(group);group.traverse(o=>o.geometry?.dispose());material.dispose();}};
 }
 class Travel {
-  constructor(game){this.game=game;this.mode=null;this.pet=null;this.boat=createBoatModel(game.scene);}
+  constructor(game){this.game=game;this.mode=null;this.pet=null;this.boat=createBoatModel(game.scene);this.horse=null;}
   mount(pet) {
     const g=this.game,p=g.player;
     const owner=g.net&&!NET.isHost?NET.id:'local';
@@ -49,6 +49,12 @@ class Travel {
       this.pet.pos.copy(p.pos);this.pet.group.position.copy(p.pos);this.pet.group.rotation.y=this.game.controls.yaw+Math.PI;
     }
     this.boat.group.visible=this.mode==='boat';this.boat.group.position.copy(p.pos);this.boat.group.rotation.y=this.game.controls.yaw;
+    // Invitado: su caballo se dibuja bajo él aunque el anfitrión tarde en moverlo.
+    if(this.mode==='horse'&&this.game.net&&!NET.isHost) {
+      this.horse=this.horse||createRiderHorse(this.game.scene);
+      this.horse.group.position.copy(p.pos);this.horse.group.rotation.y=this.game.controls.yaw+Math.PI;
+    }
+    if(this.horse)this.horse.group.visible=this.mode==='horse'&&!!this.game.net&&!NET.isHost;
   }
-  dispose(){this.dismount();this.boat.dispose();}
+  dispose(){this.dismount();this.boat.dispose();if(this.horse)this.horse.die();}
 }

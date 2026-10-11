@@ -112,12 +112,17 @@ function renderRiddle(book) {
     for(let i=0;i<r.answers.length;i++)book.button(t(r.answers[i]),()=>{e.answer(i);book.render();},section);
   }
   if(e.feedback)book.node('p',e.feedback,section).setAttribute('role','status');
-  book.button(t('riddleBook'),()=>{book.page='journey';book.render();book.el.scrollTop=0;},section);
+  backToBook(book,section);
+}
+
+// Vuelve del acertijo/adopción al libro principal (J).
+function backToBook(book,parent) {
+  book.button(t('riddleBook'),()=>{book.page='journey';book.render();book.el.scrollTop=0;},parent);
 }
 
 function renderAdoption(book) {
   const g=book.game,pet=g.adventure.adoptionTarget,food={dog:118,cat:109,horse:117}[pet?.species];
-  if(!food)return;
+  if(!food){backToBook(book,book.node('section'));return;}
   const section=book.node('section');book.node('h2',t('pet_'+pet.species),section);
   book.node('p',t('adoptRequires')+' '+nameOf(food)+' ×1',section);
   book.node('p',t('adoptAvailable')+' '+(g.inventory.isFree()?'∞':g.inventory.count(food)),section);
@@ -126,4 +131,5 @@ function renderAdoption(book) {
   },section);
   button.disabled=pet.dead||pet.tamed||pet.pos.distanceTo(g.player.pos)>6||g.inventory.count(food)<1||serializePets(g).length>=12;
   book.node('p',t('adoptHint'),section);
+  backToBook(book,section);
 }

@@ -1,5 +1,12 @@
 // Piezas visuales del multijugador: avatares de otros jugadores y
 // "títeres" de mobs (los simula el anfitrión, los demás solo los dibujan).
+// Caballo dibujado bajo un jinete, sin depender de que el anfitrión lo sitúe bien.
+function createRiderHorse(scene) {
+  const horse = new Animal(scene, 'horse', 0, -50, 0);
+  horse.saddle.visible = true;
+  horse.group.visible = false;
+  return horse;
+}
 const AVATAR_COLORS = [0x2a5ac0, 0xd08a2a, 0x8a2ac0, 0x2ac0a0];
 
 class RemoteAvatar {
@@ -12,10 +19,13 @@ class RemoteAvatar {
     this.yaw = 0;
     this.phase = 0;
     this.lastPos = new THREE.Vector3();
-    this.boat=createBoatModel(scene);this.vehicle=null;
+    this.scene=scene;this.boat=createBoatModel(scene);this.vehicle=null;this.horse=null;
   }
 
-  setVehicle(mode){this.vehicle=['horse','boat'].includes(mode)?mode:null;this.model.setSitting(!!this.vehicle||!!this.seated);}
+  setVehicle(mode){
+    this.vehicle=['horse','boat'].includes(mode)?mode:null;this.model.setSitting(!!this.vehicle||!!this.seated);
+    if(this.vehicle==='horse'&&!this.horse)this.horse=createRiderHorse(this.scene);
+  }
 
   // Apariencia personalizada del otro jugador (llega por red al conectarse).
   setAppearance(app) {
@@ -36,6 +46,13 @@ class RemoteAvatar {
     const shown=this.pos.clone();if(this.vehicle==='horse')shown.y+=.5;if(this.vehicle==='boat')shown.y-=.3;
     g.position.lerp(shown, Math.min(1, dt * 12));
     this.boat.group.visible=this.vehicle==='boat';this.boat.group.position.copy(this.pos);this.boat.group.rotation.y=this.yaw;
+    if(this.horse){
+      this.horse.group.visible=this.vehicle==='horse';
+      this.horse.group.position.copy(g.position);this.horse.group.position.y-=.5;
+      this.horse.group.rotation.y=this.yaw+Math.PI;
+      this.horse.legs.forEach((leg,i)=>{leg.rotation.x=Math.sin(this.phase)*(i%2?.5:-.5);});
+      if(this.vehicle==='horse'&&g.position.distanceTo(this.lastPos)>.01)this.phase+=dt*10;
+    }
     g.rotation.y = this.yaw + Math.PI;
     // Derribado: tumbado en el suelo, sin animación de piernas.
     if (this.down) {
@@ -56,7 +73,7 @@ class RemoteAvatar {
     }
   }
 
-  dispose() { this.boat.dispose();this.model.die(); }
+  dispose() { this.boat.dispose();if(this.horse)this.horse.die();this.model.die(); }
 }
 
 class PuppetManager {
