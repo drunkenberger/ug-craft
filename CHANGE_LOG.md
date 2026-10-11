@@ -76,3 +76,4 @@
 [2026-10-11] Vista FIFA: el ataque a mobs sale de los ojos del jugador (aimRay) en vez de la cámara trasera | Archivos: js/game-combat.js, tests/fifa-ataque.test.js, package.json | ✅
 [2026-10-11] Caballos en red: cada jinete (remoto o invitado) dibuja su propio caballo bajo él y se oculta el caballo real mientras lo montan, así no se ve al jinete flotando | Archivos: js/netplay.js, js/travel.js, js/game-lifecycle.js, tests/caballo-red.test.js, package.json | ✅
 [2026-10-11] Libro de aventuras (J): la página de adoptar compañero tiene botón «Ver el libro de aventuras» para volver al menú principal | Archivos: js/expedition-ui.js, tests/libro-volver.test.js, package.json | ✅
+[2026-10-11] Golems: los invitados no podían colocar su golem (placeGolem exigía MobManager local, que solo tiene el anfitrión); ahora comprueba el mapa y avisa al anfitrión | Archivos: js/golem.js, tests/golem.test.js | ✅

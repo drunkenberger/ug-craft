@@ -132,7 +132,7 @@ class IronGolem extends Creature {
 
 // Fabrica un golem donde apunta el jugador (el anfitrión lo crea; un invitado se lo pide).
 function placeGolem(g, target) {
-  if (!g.mobs) { g.ui.toast(t('golemNeedsMobs')); return true; }
+  if (!g.map.zombies) { g.ui.toast(t('golemNeedsMobs')); return true; }
   if (!target) return true;
   const { x, y, z } = target.outside;
   if ([0, 1, 2].some((dy) => g.world.isSolid(x, y + dy, z))) { g.ui.toast(t('golemNoSpace')); return true; }

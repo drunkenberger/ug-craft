@@ -58,16 +58,16 @@ const pup=pm.findById(77);check(pup&&pup.netType==='irongolem'&&pup.owner===5,'t
 
 // 8. Colocación: espacio, límite, consumo y mensaje de red.
 const sent=[];globalThis.NET={isHost:true,id:9,send:m=>sent.push(m)};
-const toasts=[];game.world=w;game.ui={toast:m=>toasts.push(m)};game.inventory=new Inventory('counted');game.inventory.add(140,5);game.selectedId=()=>140;
+const toasts=[];game.map={zombies:true};game.world=w;game.ui={toast:m=>toasts.push(m)};game.inventory=new Inventory('counted');game.inventory.add(140,5);game.selectedId=()=>140;
 const place=(x)=>placeGolem(game,{outside:{x,y:Math.ceil(Y),z:20}});
 const before=mobs.zombies.length;
 place(3);check(mobs.zombies.length===before+1&&game.inventory.count(140)===4,'no colocó el golem');
 w.setBlock(5,Math.ceil(Y)+2,20,32);place(5);check(game.inventory.count(140)===4,'colocó sin espacio');
 place(6);place(7);place(2);
 check(game.inventory.count(140)===3,'límite de 3 golems no respetado');
-game.mobs=null;place(1);check(game.inventory.count(140)===3&&toasts.includes(t('golemNeedsMobs')),'permitido sin supervivencia');
-game.mobs=mobs;game.net=true;NET.isHost=false;game.hittableCreatures=()=>[];
-place(1);check(sent.some(m=>m.t==='golem'),'el invitado no avisó al anfitrión');
+game.map={zombies:false};place(1);check(game.inventory.count(140)===3&&toasts.includes(t('golemNeedsMobs')),'permitido sin supervivencia');
+game.map={zombies:true};game.mobs=null;game.net=true;NET.isHost=false;game.hittableCreatures=()=>[]; // el invitado no tiene MobManager
+place(1);check(sent.some(m=>m.t==='golem')&&game.inventory.count(140)===2,'el invitado no avisó al anfitrión');
 
 // 9. Datos: receta e icono.
 check(RECIPES.some(r=>r.out.id===140&&r.cost[0][0]===112),'falta la receta');
