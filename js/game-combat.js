@@ -5,6 +5,15 @@ const GameCombat = {
     return this.raycaster;
   },
 
+  // Rayo de ataque: en vista FIFA sale de los ojos del jugador (no de la cámara que lo mira desde atrás).
+  aimRay() {
+    if (this.cameraMode !== 'third') return this.centerRay();
+    const { yaw, pitch } = this.controls, c = Math.cos(pitch);
+    const dir = new THREE.Vector3(-Math.sin(yaw) * c, Math.sin(pitch), -Math.cos(yaw) * c);
+    this.raycaster.set(this.player.eyePosition(), dir);
+    return this.raycaster;
+  },
+
   targetBlock() {
     const hits = this.centerRay().intersectObjects(this.world.raycastTargets());
     if (!hits.length) return null;
@@ -23,9 +32,9 @@ const GameCombat = {
     if (this.mobs) this.mobs.collectMeshes(meshes);
     if (this.animals) this.animals.collectMeshes(meshes);
     if (this.puppets) this.puppets.collectMeshes(meshes);
-    const hits = this.centerRay().intersectObjects(meshes);
+    const hits = this.aimRay().intersectObjects(meshes);
     if (!hits.length) return null;
-    const wall = this.centerRay().intersectObjects(this.world.raycastTargets())[0];
+    const wall = this.aimRay().intersectObjects(this.world.raycastTargets())[0];
     if (wall && wall.distance < hits[0].distance) return null;
     return hits[0].object.userData.creature;
   },
