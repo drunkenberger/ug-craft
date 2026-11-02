@@ -361,6 +361,7 @@ const ICON_PALETTE = {
   D: 'rgb(110,230,225)', // diamante
   A: 'rgb(220,50,50)',   // manzana
   L: 'rgb(70,160,60)',   // hoja verde
+  U: 'rgb(60,120,220)',  // agua
 };
 
 const ICON_ART = {
@@ -523,6 +524,26 @@ const ICON_ART = {
     'GIILLIIG',
     '.GIIIIG.',
     '..GGGG..',
+  ],
+  110: [ // cubo vacío
+    '.IIIIII.',
+    'I......I',
+    '.I....I.',
+    '.I....I.',
+    '.GIIIIG.',
+    '..GIIG..',
+    '..GGGG..',
+    '........',
+  ],
+  111: [ // cubo con agua
+    '.IIIIII.',
+    'IUUUUUUI',
+    '.IUUUUI.',
+    '.IUUUUI.',
+    '.GIIIIG.',
+    '..GIIG..',
+    '..GGGG..',
+    '........',
   ],
   48: [ // hueso
     'OO......',

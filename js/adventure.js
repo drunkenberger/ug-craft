@@ -198,6 +198,7 @@ function adventureRightClick(g,creature,target) {
   if(target&&[55,56,57].includes(g.world.getBlock(target.inside.x,target.inside.y,target.inside.z)))return g.expedition.interact(target);
   if(item?.kind==='armor'){g.armor.equip(selected);return true;}
   if(item?.kind==='golem')return placeGolem(g,target);
+  if(item?.kind==='bucket'||item?.kind==='waterbucket')return useBucket(g,target);
   if(creature?.netType==='villager') {g.adventure.book.page='village';g.adventure.book.show();return true;}
   if(creature?.tamed) {
     if(item?.kind==='saddle' && creature.species==='horse')g.expedition.travel.mount(creature);
