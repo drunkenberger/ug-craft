@@ -424,7 +424,9 @@ server.listen(PORT, () => {
 });
 
 // Al apagar, volcar los mundos compartidos pendientes a disco.
-process.on('SIGINT', () => {
-  for (const name of rooms.keys()) if (isPersistent(name)) flushRoom(name);
-  process.exit(0);
-});
+for (const sig of ['SIGINT', 'SIGTERM']) {
+  process.on(sig, () => {
+    for (const name of rooms.keys()) if (isPersistent(name)) flushRoom(name);
+    process.exit(0);
+  });
+}

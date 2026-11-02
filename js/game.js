@@ -60,6 +60,7 @@ class Game {
         fallDamage: this.map.fallDamage,
         driving: !!this.map.driving,
         hunger: !!this.map.hunger,
+        canFly: !!this.map.canFly,
         onVoidFall: this.map.onVoidFall ? () => this.map.onVoidFall(this) : null,
       },
       (hurt) => { this.renderHearts(); if (hurt) this.ui.damageFlash(); },
@@ -195,8 +196,14 @@ class Game {
         const serverHasWorld = msg.edits && Object.keys(msg.edits).length > 0;
         if (this.gameId && serverHasWorld) this.adoptServerWorld(msg.edits);
         else this.applyNetEdits(msg.edits || {});
+        // Reconexión: lo hecho sin conexión manda sobre lo guardado en el servidor.
+        const reconnected = this.netJoined;
+        this.netJoined = true;
+        this.applyNetEdits(NET.pendingEdits());
+        NET.flushOutbox();
         // Estado personal guardado (posición, inventario, vida, hambre) de esta partida.
-        if (this.gameId && msg.pstate) this.restorePlayerState(msg.pstate);
+        if (this.gameId && msg.pstate && !reconnected) this.restorePlayerState(msg.pstate);
+        else if (reconnected) this.savePlayerState();
         for (const id of msg.peers) this.addAvatar(id);
         NET.send({ t: 'skin', app: this.armor.appearance() });
         if (NET.isHost) {

@@ -35,6 +35,7 @@ class Player {
     this.starveTimer = 0;
     this.dead = false;
     this.sitting = false;
+    this.flying = false;
   }
 
   eyePosition() {
@@ -86,12 +87,20 @@ class Player {
       this.boost.t -= dt;
     }
 
-    if (!this.rules.driving && !this.rules.boating && controls.keys.has('Space')) {
-      if (this.inWater) this.vel.y = 3.4; // nadar hacia arriba
-      else if (this.onGround) this.vel.y = CFG.JUMP_SPEED*(this.rules.jumpScale||1);
+    if (this.flying && !(this.rules.canFly && !this.rules.driving && !this.rules.boating)) this.flying = false;
+    if (this.flying) {
+      // Vuelo: Espacio sube, Mayús izquierda baja, sin gravedad.
+      this.vel.x *= 1.6;
+      this.vel.z *= 1.6;
+      this.vel.y = ((controls.keys.has('Space') ? 1 : 0) - (controls.keys.has('ShiftLeft') ? 1 : 0)) * CFG.FLY_SPEED;
+    } else {
+      if (!this.rules.driving && !this.rules.boating && controls.keys.has('Space')) {
+        if (this.inWater) this.vel.y = 3.4; // nadar hacia arriba
+        else if (this.onGround) this.vel.y = CFG.JUMP_SPEED*(this.rules.jumpScale||1);
+      }
+      this.vel.y += CFG.GRAVITY * (this.inWater ? 0.3 : 1) * dt;
+      this.vel.y = Math.max(this.vel.y, this.inWater ? -3 : -50);
     }
-    this.vel.y += CFG.GRAVITY * (this.inWater ? 0.3 : 1) * dt;
-    this.vel.y = Math.max(this.vel.y, this.inWater ? -3 : -50);
 
     if(this.rules.boating && this.inWater) {
       let waterY=Math.floor(this.pos.y);while(waterY<CFG.HEIGHT && this.world.getBlock(bx,waterY,bz)===17)waterY++;
@@ -100,6 +109,7 @@ class Player {
     const prevVy = this.vel.y;
     moveBody(this.world, this, dt);
 
+    if (this.flying && this.onGround && !controls.keys.has('Space')) this.flying = false; // aterrizó
     if (this.rules.fallDamage && this.onGround && prevVy < -13 && !this.inWater) {
       this.damage(1 + Math.floor((-prevVy - 13) / 4),false,'fall');
     }

@@ -19,6 +19,10 @@ class Controls {
       if(e.code==='KeyJ' && !e.repeat && this.locked && this.onAdventure) this.onAdventure();
       if(e.code==='KeyQ'&&!e.repeat&&this.locked&&this.onRotate)this.onRotate();
       if(e.code==='ShiftLeft'&&!e.repeat&&this.locked&&this.onDismount)this.onDismount();
+      if(e.code==='Space'&&!e.repeat&&this.locked&&this.onDoubleSpace){
+        const now=performance.now();
+        if(now-(this.lastSpace||0)<300){this.lastSpace=0;this.onDoubleSpace();}else this.lastSpace=now;
+      }
       if(e.code==='KeyR' && !e.repeat && this.locked && this.onCallPets) this.onCallPets();
       const num = parseInt(e.key, 10);
       // 1-8 seleccionan directo; 9 abre el selector completo del inventario.

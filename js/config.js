@@ -6,6 +6,7 @@ const CFG = {
   RENDER_DIST: 3,     // radio de chunks visibles
   GRAVITY: -26,
   JUMP_SPEED: 8.6,
+  FLY_SPEED: 7,
   PLAYER_SPEED: 4.8,
   PLAYER_HALF_W: 0.3,
   PLAYER_HEIGHT: 1.8,

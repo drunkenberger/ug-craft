@@ -24,6 +24,15 @@ const GameInteractions = {
     this.ui.toast(t('sitDown'));
   },
 
+  // Doble Espacio: activa o desactiva el vuelo (supervivencia y creativo).
+  toggleFly() {
+    const p = this.player;
+    if (!p.rules.canFly || p.dead || p.sitting || this.expedition.travel.mode) return;
+    p.flying = !p.flying;
+    p.vel.y = 0;
+    this.ui.toast(t(p.flying ? 'flyOn' : 'flyOff'));
+  },
+
   standUp() {
     if (!this.player.sitting) return;
     this.player.sitting = false;
@@ -249,6 +258,7 @@ const GameInteractions = {
     this.controls.onSlotChange = () => this.refreshHotbar();
     this.controls.onOpenCraft = () => this.openCrafting();
     this.controls.onAdventure = () => {if(this.map.canBuild)this.adventure.book.show();};
+    this.controls.onDoubleSpace = () => this.toggleFly();
     this.controls.onDismount=()=>this.expedition.travel.dismount();
     this.controls.onRotate=()=>{this.expedition.rotation=(this.expedition.rotation+1)%4;this.ui.toast(t('stairsDirection')+' '+['↑','←','↓','→'][this.expedition.rotation]);};
     this.controls.onCallPets = () => {if(this.map.canBuild)this.adventure.callPets();};

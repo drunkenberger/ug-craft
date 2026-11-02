@@ -9,6 +9,7 @@ const NET = {
   room: null,
   player: null,
   retryTimer: null,
+  outbox: new Map(), // bloques puestos/rotos sin conexión: se reenvían al reconectar
 
   join(roomName, handlers, player) {
     this.room = roomName;
@@ -54,11 +55,27 @@ const NET = {
   send(obj) {
     if (this.ws && this.ws.readyState === WebSocket.OPEN) {
       this.ws.send(JSON.stringify(obj));
+    } else if (obj.t === 'block' && this.handlers) {
+      this.outbox.set(`${obj.x},${obj.y},${obj.z}`, obj);
     }
+  },
+
+  /** Ediciones hechas sin conexión, como { "x,y,z": id }. */
+  pendingEdits() {
+    const out = {};
+    for (const [k, m] of this.outbox) out[k] = m.id;
+    return out;
+  },
+
+  /** Reenvía al servidor las ediciones que quedaron en cola. */
+  flushOutbox() {
+    for (const m of this.outbox.values()) this.send(m);
+    this.outbox.clear();
   },
 
   leave() {
     this.handlers = null;
+    this.outbox.clear();
     if (this.retryTimer) { clearTimeout(this.retryTimer); this.retryTimer = null; }
     if (this.ws) { this.ws.onclose = null; this.ws.close(); }
     this.ws = null;
